@@ -32,20 +32,11 @@ yarn-error.*
 
 # local env files
 .env*.local
-.env
-
-# Google Cloud credentials
-backend-example/credentials.json
-backend-example/*-*.json
-**/credentials.json
-**/*-*.json
-
-# Backend database
-backend-example/identified_records.db
-backend-example/*.db
 
 # typescript
 *.tsbuildinfo
+
+app-example
 
 # generated native folders
 /ios
