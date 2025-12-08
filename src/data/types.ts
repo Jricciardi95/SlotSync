@@ -30,11 +30,25 @@ export type RecordModel = {
   artist: string;
   artistLastName?: string | null;
   year?: number | null;
+  genre?: string | null;
   notes?: string | null;
   coverImageLocalUri?: string | null;
   coverImageRemoteUrl?: string | null;
+  discogsId?: string | null;
+  musicbrainzId?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * Image hash entry for caching identified albums
+ */
+export type ImageHash = {
+  id: string;
+  imageHash: string;
+  recordId: string;
+  submittedImageUri?: string | null;
+  createdAt: string;
 };
 
 export type SlotSyncRecord = RecordModel;
@@ -92,4 +106,25 @@ export type BatchPhoto = {
   errorMessage?: string | null;
   processedAt?: string | null;
 };
+
+export type Playlist = {
+  id: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlaylistItem = {
+  id: string;
+  playlistId: string;
+  itemType: 'record' | 'track';
+  recordId: string | null;
+  trackId: string | null;
+  position: number;
+  addedAt: string;
+};
+
+// Legacy type alias for backward compatibility
+export type PlaylistRecord = PlaylistItem;
 

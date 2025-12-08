@@ -13,14 +13,22 @@ export type StandsStackParamList = {
 };
 
 export type LibraryStackParamList = {
-  LibraryHome: undefined;
-  AddRecord: { imageUri?: string };
+  LibraryHome: { returnToTab?: 'ALBUMS' | 'ARTISTS' | 'SONGS' | 'ALL' } | undefined;
+  AddRecord: { 
+    imageUri?: string; 
+    initialArtist?: string; 
+    initialTitle?: string; 
+    initialYear?: number;
+    identifiedImageUrl?: string;
+  };
   ScanRecord: undefined;
-  RecordDetail: { recordId: string };
-  SongDetail: { trackTitle: string };
+  RecordDetail: { recordId: string; returnToTab?: 'ALBUMS' | 'ARTISTS' | 'SONGS' | 'ALL' };
+  EditRecord: { recordId: string };
+  SongDetail: { trackTitle: string; returnToTab?: 'ALBUMS' | 'ARTISTS' | 'SONGS' | 'ALL' };
   CSVImport: undefined;
   BatchScan: undefined;
-  BatchReview: { photoIds?: string[]; jobId?: string };
+  BatchReview: { photoIds?: string[]; jobId?: string; autoStart?: boolean };
+  DevTest: undefined; // Dev-only test screen
 };
 
 export type ModesStackParamList = {

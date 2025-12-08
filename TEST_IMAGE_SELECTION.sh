@@ -1,0 +1,42 @@
+#!/bin/bash
+
+echo "🧪 Testing Image Selection Changes"
+echo ""
+
+# Find LAN IP
+LAN_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}')
+echo "📍 Your LAN IP appears to be: $LAN_IP"
+echo ""
+
+echo "═══════════════════════════════════════════════════════════════"
+echo "  TERMINAL 1: START BACKEND"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "Run these commands in Terminal 1:"
+echo ""
+echo "cd /Users/jamesricciardi/SlotSync/backend-example"
+echo "node server-hybrid.js"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "  TERMINAL 2: START FRONTEND"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "Run these commands in Terminal 2:"
+echo ""
+echo "cd /Users/jamesricciardi/SlotSync"
+echo "export EXPO_PUBLIC_API_BASE_URL='http://$LAN_IP:3000'"
+echo "npx expo start --clear"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "  QUICK TEST: Backend API"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "Test the identify-by-text endpoint:"
+echo ""
+echo "curl -X POST http://localhost:3000/api/identify-by-text \\"
+echo "  -H 'Content-Type: application/json' \\"
+echo "  -d '{\"artist\":\"Pink Floyd\",\"title\":\"The Dark Side of the Moon\"}'"
+echo ""
+echo "Look for 'coverImageRemoteUrl' in the response!"
+echo ""
+

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigation } from '../navigation/CustomNavigation';
+import { useNavigation } from '../navigation/hooks';
 import { AppScreen } from '../components/AppScreen';
 import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';

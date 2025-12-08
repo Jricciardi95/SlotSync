@@ -3,7 +3,12 @@ import { colors } from './colors';
 import { typography } from './typography';
 import { spacing, radius, shadow } from './layout';
 
-// Static theme object used app-wide
+/**
+ * Main theme object
+ * 
+ * All theme values are exported from a single source of truth.
+ * Components should import from this file via useTheme() hook.
+ */
 export const theme = {
   colors,
   typography,

@@ -19,6 +19,9 @@ import { useBatchScan } from '../contexts/BatchScanContext';
 import {
   identifyRecord,
   IdentificationMatch,
+  normalizeScanResult,
+  ScanResult,
+  IdentificationResponse,
 } from '../services/RecordIdentificationService';
 import {
   createRecord,
@@ -28,7 +31,6 @@ import {
   getBatchPhotos,
   getBatchJob,
   deleteBatchJob,
-  BatchPhoto,
 } from '../data/repository';
 import { batchProcessingService } from '../services/BatchProcessingService';
 import { AppIconButton } from '../components/AppIconButton';
@@ -40,10 +42,10 @@ type ProcessedPhoto = {
   photoId: string;
   originalUri: string;
   status: 'processing' | 'success' | 'error' | 'pending';
-  result?: {
-    bestMatch: IdentificationMatch;
-    alternates: IdentificationMatch[];
-    confidence: number;
+  result?: ScanResult & {
+    confidence?: number;
+    isSuggestion?: boolean;
+    extractedText?: string;
   };
   error?: string;
 };
@@ -51,7 +53,7 @@ type ProcessedPhoto = {
 export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const { colors, spacing, radius } = useTheme();
   const { pendingPhotos, getPhotoById, removePhoto, clearPhotos } = useBatchScan();
-  const { photoIds, jobId } = route.params || {};
+  const { photoIds, jobId, autoStart } = route.params || {};
 
   const [processedPhotos, setProcessedPhotos] = useState<ProcessedPhoto[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -74,8 +76,27 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         };
       });
       setProcessedPhotos(initial);
+      
+      // Auto-start processing if autoStart flag is set
+      if (autoStart && initial.length > 0) {
+        // Small delay to ensure state is set, then start processing
+        setTimeout(async () => {
+          // Create batch job and start processing immediately
+          const photoUris = initial.map((p) => p.originalUri).filter(Boolean);
+          const job = await createBatchJob(photoUris);
+          setCurrentJobId(job.id);
+          setProcessing(true);
+          
+          batchProcessingService.startProcessing(job.id, (progress) => {
+            setProgress(progress);
+            setProcessingIndex(progress.current - 1);
+          });
+          
+          await loadJobData(job.id);
+        }, 200);
+      }
     }
-  }, [currentJobId, photoIds, getPhotoById]);
+  }, [currentJobId, photoIds, getPhotoById, autoStart]);
 
   // Check for background processing updates
   useEffect(() => {
@@ -106,10 +127,19 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         if (photo.status === 'success' && photo.resultData) {
           try {
             const parsed = JSON.parse(photo.resultData);
-            result = {
+            // Normalize into ScanResult structure
+            const normalized = normalizeScanResult({
               bestMatch: parsed.bestMatch,
-              alternates: parsed.alternates,
+              alternates: parsed.alternates || [],
+              confidence: parsed.confidence || 0.5,
+              candidates: parsed.candidates,
+              primaryMatch: parsed.primaryMatch,
+            });
+            result = {
+              ...normalized,
               confidence: parsed.confidence,
+              isSuggestion: parsed.isSuggestion || false,
+              extractedText: parsed.extractedText,
             };
           } catch (error) {
             console.error('Failed to parse result data:', error);
@@ -158,10 +188,32 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const processAllPhotos = async () => {
-    if (processedPhotos.length === 0) return;
+    // Get current processed photos (may be empty initially)
+    const photosToProcess = processedPhotos.length > 0 
+      ? processedPhotos 
+      : (photoIds && photoIds.length > 0 
+          ? photoIds.map((id) => {
+              const photo = getPhotoById(id);
+              return {
+                photoId: id,
+                originalUri: photo?.uri || '',
+                status: 'pending' as const,
+              };
+            })
+          : []);
+
+    if (photosToProcess.length === 0) {
+      console.warn('[BatchReview] No photos to process');
+      return;
+    }
+
+    // Update state if we initialized from photoIds
+    if (processedPhotos.length === 0 && photosToProcess.length > 0) {
+      setProcessedPhotos(photosToProcess);
+    }
 
     // Create batch job in database
-    const photoUris = processedPhotos.map((p) => p.originalUri).filter(Boolean);
+    const photoUris = photosToProcess.map((p) => p.originalUri).filter(Boolean);
     const job = await createBatchJob(photoUris);
     setCurrentJobId(job.id);
 
@@ -177,33 +229,70 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
     await loadJobData(job.id);
   };
 
+  const handleTryAnotherForItem = (itemId: string) => {
+    setProcessedPhotos(prevItems =>
+      prevItems.map(item => {
+        if (item.photoId !== itemId) return item;
+        const { result } = item;
+        if (!result || !Array.isArray(result.alternates) || result.alternates.length === 0) {
+          return item;
+        }
+
+        const [next, ...rest] = result.alternates;
+        return {
+          ...item,
+          result: {
+            ...result,
+            current: next,
+            alternates: [...rest, result.current],
+          },
+        };
+      })
+    );
+  };
+
   const handleAction = async (
     photo: ProcessedPhoto,
     action: 'yes' | 'edit' | 'cancel'
   ) => {
     if (action === 'cancel') {
+      // CRITICAL: Cancel should only remove from batch list, nothing else
+      // No save, no navigation, no API calls - just remove the card
       removePhoto(photo.photoId);
       setProcessedPhotos((prev) => prev.filter((p) => p.photoId !== photo.photoId));
       return;
     }
 
     if (action === 'edit') {
-      navigation.navigate('AddRecord', { imageUri: photo.originalUri });
+      // Edit Manually: Navigate to AddRecord screen with the identified image if available
+      // The AddRecord screen will handle saving with the correct image priority
+      const imageUri = photo.result?.current.coverImageRemoteUrl || photo.originalUri;
+      navigation.navigate('AddRecord', { 
+        imageUri,
+        initialArtist: photo.result?.current.artist,
+        initialTitle: photo.result?.current.title,
+        initialYear: photo.result?.current.year,
+        // Pass the identified image URL so AddRecord can use it
+        identifiedImageUrl: photo.result?.current.coverImageRemoteUrl,
+      });
+      // Remove from batch list since user is editing manually
       removePhoto(photo.photoId);
+      setProcessedPhotos((prev) => prev.filter((p) => p.photoId !== photo.photoId));
       return;
     }
 
     if (action === 'yes' && photo.result) {
+      const currentMatch = photo.result.current;
       // Check for duplicate
       const duplicate = await findDuplicateRecord(
-        photo.result.bestMatch.artist,
-        photo.result.bestMatch.title
+        currentMatch.artist,
+        currentMatch.title
       );
 
       if (duplicate) {
         Alert.alert(
           'Album Already in Library',
-          `"${photo.result.bestMatch.artist} - ${photo.result.bestMatch.title}" is already in your library. Add again?`,
+          `"${currentMatch.artist} - ${currentMatch.title}" is already in your library. Add again?`,
           [
             { text: 'No', style: 'cancel' },
             {
@@ -225,17 +314,28 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!photo.result) return;
 
     try {
+      const currentMatch = photo.result.current;
+      
+      // CRITICAL: Use unified image selection logic
+      // If metadata lookup returned a coverImageRemoteUrl, use it and ignore user photo
+      // Only use user photo if no metadata match exists
+      const { prepareImageFields } = require('../utils/imageSelection');
+      const imageFields = prepareImageFields(
+        currentMatch.coverImageRemoteUrl,
+        photo.originalUri
+      );
+      
       const newRecord = await createRecord({
-        title: photo.result.bestMatch.title,
-        artist: photo.result.bestMatch.artist,
-        year: photo.result.bestMatch.year ?? null,
-        coverImageLocalUri: photo.originalUri,
-        coverImageRemoteUrl: photo.result.bestMatch.coverImageRemoteUrl ?? null,
+        title: currentMatch.title,
+        artist: currentMatch.artist,
+        year: currentMatch.year ?? null,
+        coverImageRemoteUrl: imageFields.coverImageRemoteUrl,
+        coverImageLocalUri: imageFields.coverImageLocalUri,
       });
 
       // Save tracks if available
-      if (photo.result.bestMatch.tracks && photo.result.bestMatch.tracks.length > 0) {
-        for (const track of photo.result.bestMatch.tracks) {
+      if (currentMatch.tracks && currentMatch.tracks.length > 0) {
+        for (const track of currentMatch.tracks) {
           try {
             await createTrack({
               recordId: newRecord.id,
@@ -251,18 +351,22 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
 
-      // Remove from pending and processed
+      // CRITICAL: Remove from batch list immediately after successful save
+      // This ensures the card disappears right away, providing immediate feedback
       removePhoto(photo.photoId);
       setProcessedPhotos((prev) => prev.filter((p) => p.photoId !== photo.photoId));
 
-      if (processedPhotos.length === 1) {
-        // Last one, go back
+      // If this was the last item, navigate back to library
+      const remainingCount = processedPhotos.length - 1;
+      if (remainingCount === 0) {
         clearPhotos();
         navigation.navigate('LibraryHome');
       }
     } catch (error) {
       console.error('Failed to save record', error);
       Alert.alert('Error', 'Could not save record.');
+      // CRITICAL: Don't remove from list if save failed
+      // The card should remain visible so user can try again or edit manually
     }
   };
 
@@ -294,9 +398,9 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
               <View style={[styles.photo, styles.photoPlaceholder, { backgroundColor: colors.backgroundMuted }]}>
                 <ActivityIndicator color={colors.accent} />
               </View>
-            ) : photo.status === 'success' && photo.result?.bestMatch.coverImageRemoteUrl ? (
+            ) : photo.status === 'success' && photo.result?.current.coverImageRemoteUrl ? (
               <Image
-                source={{ uri: photo.result.bestMatch.coverImageRemoteUrl }}
+                source={{ uri: photo.result.current.coverImageRemoteUrl }}
                 style={styles.photo}
               />
             ) : photo.status === 'error' ? (
@@ -318,40 +422,65 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Information Below */}
         {photo.status === 'success' && photo.result && (
           <View style={styles.infoContainer}>
+            {photo.result.isSuggestion && (
+              <View style={[styles.suggestionBanner, { backgroundColor: colors.accentMuted, marginBottom: spacing.md }]}>
+                <AppText variant="caption" style={{ color: colors.accent, fontWeight: '600' }}>
+                  ⚠️ Low Confidence Match - Please Review
+                </AppText>
+                {photo.result.extractedText && (
+                  <AppText variant="caption" style={{ color: colors.textMuted, marginTop: spacing.xs }}>
+                    Extracted: "{photo.result.extractedText}"
+                  </AppText>
+                )}
+              </View>
+            )}
+            
             <AppText variant="subtitle" style={{ marginBottom: spacing.sm }}>
-              {photo.result.bestMatch.artist}
+              {photo.result.current.artist}
             </AppText>
             <AppText variant="body" style={{ marginBottom: spacing.xs }}>
-              {photo.result.bestMatch.title}
+              {photo.result.current.title}
             </AppText>
-            {photo.result.bestMatch.year && (
+            {photo.result.current.year && (
               <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: spacing.sm }}>
-                Year: {photo.result.bestMatch.year}
+                Year: {photo.result.current.year}
               </AppText>
             )}
             <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: spacing.md }}>
-              Confidence: {Math.round(photo.result.confidence * 100)}%
+              Confidence: {Math.round((photo.result.confidence || 0) * 100)}%
             </AppText>
 
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              <AppButton
-                title="Yes"
-                onPress={() => handleAction(photo, 'yes')}
-                style={{ flex: 1 }}
-              />
-              <AppButton
-                title="Edit Manually"
-                variant="secondary"
-                onPress={() => handleAction(photo, 'edit')}
-                style={{ flex: 1, marginLeft: spacing.sm }}
-              />
-              <AppButton
-                title="Cancel"
-                variant="ghost"
-                onPress={() => handleAction(photo, 'cancel')}
-                style={{ flex: 1, marginLeft: spacing.sm }}
-              />
+              <View style={styles.buttonRow}>
+                <AppButton
+                  title={photo.result.isSuggestion ? "Accept" : "Yes"}
+                  onPress={() => handleAction(photo, 'yes')}
+                  style={styles.primaryButton}
+                />
+                {Array.isArray(photo.result.alternates) && photo.result.alternates.length > 0 && (
+                  <AppButton
+                    title="Try Another"
+                    variant="secondary"
+                    onPress={() => handleTryAnotherForItem(photo.photoId)}
+                    style={[styles.secondaryButton, { marginLeft: spacing.xs }]}
+                  />
+                )}
+              </View>
+              <View style={[styles.buttonRow, { marginTop: spacing.xs }]}>
+                <AppButton
+                  title="Edit Manually"
+                  variant="secondary"
+                  onPress={() => handleAction(photo, 'edit')}
+                  style={styles.secondaryButton}
+                />
+                <AppButton
+                  title="Cancel"
+                  variant="ghost"
+                  onPress={() => handleAction(photo, 'cancel')}
+                  style={[styles.secondaryButton, { marginLeft: spacing.xs }]}
+                />
+              </View>
             </View>
           </View>
         )}
@@ -362,18 +491,20 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
               {photo.error || 'Unable to identify record'}
             </AppText>
             <View style={styles.actionButtons}>
-              <AppButton
-                title="Edit Manually"
-                variant="secondary"
-                onPress={() => handleAction(photo, 'edit')}
-                style={{ flex: 1 }}
-              />
-              <AppButton
-                title="Cancel"
-                variant="ghost"
-                onPress={() => handleAction(photo, 'cancel')}
-                style={{ flex: 1, marginLeft: spacing.sm }}
-              />
+              <View style={styles.buttonRow}>
+                <AppButton
+                  title="Edit Manually"
+                  variant="secondary"
+                  onPress={() => handleAction(photo, 'edit')}
+                  style={styles.secondaryButton}
+                />
+                <AppButton
+                  title="Cancel"
+                  variant="ghost"
+                  onPress={() => handleAction(photo, 'cancel')}
+                  style={[styles.secondaryButton, { marginLeft: spacing.xs }]}
+                />
+              </View>
             </View>
           </View>
         )}
@@ -396,13 +527,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
     <AppScreen title="Review Identifications">
       <View style={styles.headerActions}>
         <AppIconButton name="arrow-back" onPress={handleBack} />
-        {!processing && hasPending && (
-          <AppButton
-            title="Process All"
-            onPress={processAllPhotos}
-            style={{ paddingHorizontal: spacing.md }}
-          />
-        )}
+        {/* Process All button removed - processing starts automatically when autoStart flag is set */}
       </View>
 
       {processing && (
@@ -474,9 +599,19 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   actionButtons: {
+    marginTop: 12,
+  },
+  buttonRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
+  },
+  primaryButton: {
+    flex: 1,
+    minWidth: 80,
+  },
+  secondaryButton: {
+    flex: 1,
+    minWidth: 100,
   },
   processingContainer: {
     alignItems: 'center',
@@ -486,6 +621,17 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#333',
+  },
+  suggestionBanner: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  alternateItem: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
   },
 });
 

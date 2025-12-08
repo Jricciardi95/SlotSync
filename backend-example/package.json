@@ -4,7 +4,8 @@
   "description": "Example backend server for SlotSync record identification",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server-hybrid.js",
+    "start:mock": "node server.js",
     "start:vision": "node server-google-vision.js",
     "start:hybrid": "node server-hybrid.js",
     "dev": "nodemon server.js",
@@ -25,11 +26,14 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "form-data": "^4.0.0",
+    "json2csv": "^6.0.0-alpha.2",
     "multer": "^1.4.5-lts.1",
+    "openai": "^4.104.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.33.5",
     "sqlite3": "^5.1.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
 }
-

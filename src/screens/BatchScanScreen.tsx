@@ -12,6 +12,9 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { convertToJpeg, convertMultipleToJpeg } from '../utils/imageConverter';
 import { AppScreen } from '../components/AppScreen';
 import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
@@ -20,6 +23,7 @@ import { useTheme } from '../hooks/useTheme';
 import { LibraryStackParamList } from '../navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useBatchScan, PendingPhoto } from '../contexts/BatchScanContext';
+import { createRecord } from '../data/repository';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'BatchScan'>;
 
@@ -30,7 +34,8 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const { pendingPhotos, addPhoto, removePhoto } = useBatchScan();
+  const [importingCSV, setImportingCSV] = useState(false);
+  const { pendingPhotos, addPhoto, removePhoto, clearPhotos } = useBatchScan();
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
@@ -62,9 +67,16 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
       });
 
       if (photo?.uri) {
+        // CRITICAL: Convert to JPEG before adding (HEIC → JPEG)
+        console.log('[BatchScan] Converting captured image to JPEG...');
+        const jpegUri = await convertToJpeg(photo.uri, {
+          maxWidth: 1200,
+          quality: 0.8,
+        });
+        console.log('[BatchScan] ✅ Image converted to JPEG');
         const newPhoto: PendingPhoto = {
           id: `photo_${Date.now()}_${Math.random()}`,
-          uri: photo.uri,
+          uri: jpegUri, // Use JPEG version, not original
           timestamp: Date.now(),
         };
         addPhoto(newPhoto);
@@ -90,16 +102,25 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 1.0, // Maximum quality for better OCR/recognition
-      allowsEditing: false, // Don't allow editing to preserve original quality
-      exif: false, // Don't need EXIF data
+      quality: 1.0, // Get full quality, we'll compress in conversion
+      allowsEditing: false,
+      exif: false,
     });
 
       if (!result.canceled && result.assets) {
-        result.assets.forEach((asset) => {
+        // CRITICAL: Convert all selected images to JPEG (HEIC → JPEG)
+        console.log(`[BatchScan] Converting ${result.assets.length} selected images to JPEG...`);
+        const imageUris = result.assets.map(asset => asset.uri);
+        const jpegUris = await convertMultipleToJpeg(imageUris, {
+          maxWidth: 1200,
+          quality: 0.8,
+        });
+        console.log(`[BatchScan] ✅ Converted ${jpegUris.length} images to JPEG`);
+        
+        jpegUris.forEach((jpegUri, index) => {
           const newPhoto: PendingPhoto = {
-            id: `photo_${Date.now()}_${Math.random()}_${asset.uri}`,
-            uri: asset.uri,
+            id: `photo_${Date.now()}_${Math.random()}_${index}`,
+            uri: jpegUri, // Use JPEG version, not original
             timestamp: Date.now(),
           };
           addPhoto(newPhoto);
@@ -111,12 +132,176 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
     removePhoto(photoId);
   };
 
+  const parseCSV = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let currentLine: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentField += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        currentLine.push(currentField.trim());
+        currentField = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (currentField || currentLine.length > 0) {
+          currentLine.push(currentField.trim());
+          currentField = '';
+        }
+        if (currentLine.length > 0) {
+          lines.push(currentLine);
+          currentLine = [];
+        }
+      } else {
+        currentField += char;
+      }
+    }
+
+    if (currentField || currentLine.length > 0) {
+      currentLine.push(currentField.trim());
+      lines.push(currentLine);
+    }
+
+    return lines;
+  };
+
+  const handleUploadCSV = async () => {
+    try {
+      setImportingCSV(true);
+      
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'text/csv',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        setImportingCSV(false);
+        return;
+      }
+
+      const fileUri = result.assets[0].uri;
+      const fileContent = await FileSystem.readAsStringAsync(fileUri);
+      const lines = parseCSV(fileContent);
+
+      if (lines.length < 2) {
+        Alert.alert('Error', 'CSV file has no data rows.');
+        setImportingCSV(false);
+        return;
+      }
+
+      const headers = lines[0].map(h => h.toLowerCase());
+      const dataRows = lines.slice(1);
+
+      // Auto-detect column indices
+      const artistIdx = headers.findIndex(h => h.includes('artist') || h.includes('performer'));
+      const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('album'));
+      const yearIdx = headers.findIndex(h => h.includes('year') || h.includes('date'));
+      const notesIdx = headers.findIndex(h => h.includes('notes') || h.includes('comment'));
+
+      if (artistIdx === -1 || titleIdx === -1) {
+        Alert.alert(
+          'Missing Columns',
+          'CSV must contain "Artist" and "Title" columns. Please check your file format.'
+        );
+        setImportingCSV(false);
+        return;
+      }
+
+      let imported = 0;
+      let skipped = 0;
+
+      for (const row of dataRows) {
+        if (row.length <= Math.max(artistIdx, titleIdx)) {
+          skipped += 1;
+          continue;
+        }
+
+        const artist = row[artistIdx]?.trim();
+        const title = row[titleIdx]?.trim();
+
+        if (!artist || !title) {
+          skipped += 1;
+          continue;
+        }
+
+        try {
+          const year = yearIdx >= 0 ? parseInt(row[yearIdx] || '0', 10) : null;
+          const notes = notesIdx >= 0 ? row[notesIdx]?.trim() : null;
+
+          await createRecord({
+            title,
+            artist,
+            year: year && !isNaN(year) && year > 1900 && year < 2100 ? year : null,
+            notes: notes || null,
+          });
+
+          imported += 1;
+        } catch (error) {
+          console.error('Failed to import record', error);
+          skipped += 1;
+        }
+      }
+
+      setImportingCSV(false);
+
+      Alert.alert(
+        'Import Complete',
+        `Successfully imported ${imported} records to your library.${skipped > 0 ? ` ${skipped} rows were skipped.` : ''}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate to library to see the imported records
+              navigation.navigate('LibraryHome');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('CSV import failed', error);
+      setImportingCSV(false);
+      Alert.alert('Error', 'Could not import CSV file. Please check the file format and try again.');
+    }
+  };
+
   const handleProcessAll = () => {
     if (pendingPhotos.length === 0) {
       Alert.alert('No Photos', 'Please add at least one photo to process.');
       return;
     }
-    navigation.navigate('BatchReview', { photoIds: pendingPhotos.map((p) => p.id) });
+    // Navigate to review screen and auto-start processing
+    navigation.navigate('BatchReview', { 
+      photoIds: pendingPhotos.map((p) => p.id),
+      autoStart: true, // Flag to auto-start processing
+    });
+  };
+
+  const handleClearAll = () => {
+    if (pendingPhotos.length === 0) return;
+    
+    Alert.alert(
+      'Clear All Photos?',
+      `Remove all ${pendingPhotos.length} pending photo(s)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: () => {
+            clearPhotos();
+          },
+        },
+      ]
+    );
   };
 
   const handleCancel = () => {
@@ -217,21 +402,49 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
             variant="secondary"
             onPress={handlePickFromLibrary}
             style={{ flex: 1 }}
+            disabled={importingCSV}
           />
+          <AppButton
+            title="Upload CSV File"
+            variant="secondary"
+            onPress={handleUploadCSV}
+            style={{ flex: 1, marginLeft: spacing.sm }}
+            disabled={importingCSV}
+          />
+        </View>
+
+        {importingCSV && (
+          <View style={styles.importStatus}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <AppText variant="caption" style={{ marginLeft: spacing.sm, color: colors.textMuted }}>
+              Importing CSV records...
+            </AppText>
+          </View>
+        )}
+
+        {pendingPhotos.length > 0 && (
           <AppButton
             title={`Process All (${pendingPhotos.length})`}
             onPress={handleProcessAll}
-            disabled={pendingPhotos.length === 0}
-            style={{ flex: 1, marginLeft: spacing.sm }}
+            disabled={importingCSV}
+            style={{ marginTop: spacing.xs, marginHorizontal: 16 }}
           />
-        </View>
+        )}
 
         {/* Pending Photos Grid */}
         {pendingPhotos.length > 0 && (
           <AppCard>
-            <AppText variant="subtitle" style={{ marginBottom: spacing.sm }}>
-              Pending Photos ({pendingPhotos.length})
-            </AppText>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+              <AppText variant="subtitle">
+                Pending Photos ({pendingPhotos.length})
+              </AppText>
+              <AppButton
+                title="Clear All"
+                variant="ghost"
+                onPress={handleClearAll}
+                style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }}
+              />
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.photoGrid}>
                 {pendingPhotos.map((photo) => (
@@ -278,6 +491,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginHorizontal: 16,
+    alignSelf: 'center',
   },
   camera: {
     flex: 1,
@@ -286,7 +500,7 @@ const styles = StyleSheet.create({
   },
   cameraControls: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 8,
   },
   captureButton: {
     width: 72,
@@ -302,6 +516,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 12,
+    marginTop: -8,
   },
   photoGrid: {
     flexDirection: 'row',
@@ -324,6 +539,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  importStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    marginTop: 12,
   },
 });
 

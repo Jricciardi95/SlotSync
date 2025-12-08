@@ -8,7 +8,12 @@ import {
   BatchJob,
   BatchPhoto,
 } from '../data/repository';
-import { identifyRecord, IdentificationMatch } from './RecordIdentificationService';
+import { 
+  identifyRecord, 
+  IdentificationMatch,
+  normalizeScanResult,
+  IdentificationResponse,
+} from './RecordIdentificationService';
 
 type BatchProcessingCallback = (progress: {
   jobId: string;
@@ -94,8 +99,15 @@ class BatchProcessingService {
         // Use same identification logic as single scan
         const response = await identifyRecord(photo.photoUri);
         
-        // Store result as JSON
+        // Normalize response into ScanResult structure (same as library flow)
+        const normalizedResult = normalizeScanResult(response);
+        
+        // Store result as JSON (include both normalized structure and original fields for compatibility)
         const resultData = JSON.stringify({
+          // Normalized structure (current + alternates)
+          current: normalizedResult.current,
+          alternates: normalizedResult.alternates,
+          // Original structure (for backward compatibility)
           bestMatch: response.bestMatch,
           alternates: response.alternates,
           confidence: response.confidence,
@@ -104,14 +116,177 @@ class BatchProcessingService {
         await updateBatchPhoto(photo.id, 'success', resultData);
         completed++;
       } catch (error: any) {
-        console.error(`[BatchProcessing] Failed to identify photo ${photo.id}:`, error);
-        await updateBatchPhoto(
-          photo.id,
-          'error',
-          undefined,
-          error.message || 'Identification failed'
-        );
-        failed++;
+        // CRITICAL: Treat LOW_CONFIDENCE with albumSuggestions as suggestions, not a hard error
+        // This should not log as console.error - it's expected behavior when confidence is low
+        if (error.code === 'LOW_CONFIDENCE') {
+          // CRITICAL: Check for albumSuggestions from backend (canonical Discogs releases)
+          // This is the same approach as ScanRecordScreen uses
+          const albumSuggestions = error.albumSuggestions || error.discogsSuggestions || [];
+          const legacyCandidates = error.candidates || [];
+          
+          // Prefer albumSuggestions (canonical Discogs releases) over raw candidates
+          let validCandidates: any[] = [];
+          
+          if (albumSuggestions.length > 0) {
+            // Use canonical album suggestions from backend (already filtered by Discogs)
+            console.log(`[BatchProcessing] Low confidence for photo ${photo.id} with ${albumSuggestions.length} canonical album suggestions - treating as suggestion`);
+            validCandidates = albumSuggestions.map((suggestion: any) => ({
+              artist: suggestion.artist,
+              title: suggestion.albumTitle,
+              year: suggestion.releaseYear,
+              discogsId: suggestion.discogsId,
+              confidence: suggestion.confidence || 0.5,
+              source: suggestion.source || 'discogs',
+            }));
+          } else if (legacyCandidates.length > 0) {
+            // Fallback to legacy candidates (for backward compatibility)
+            console.log(`[BatchProcessing] Low confidence for photo ${photo.id} with ${legacyCandidates.length} legacy candidates - treating as suggestion`);
+            
+            // Backend should already filter candidates, but add extra safety filter here
+            // Filter out obviously bad candidates (e.g., "Discogs", "| Releases", Reddit posts, etc.)
+            validCandidates = legacyCandidates.filter((candidate: any) => {
+            if (!candidate.artist || !candidate.title) return false;
+            
+            // Reject candidates that are clearly from web page titles, not album info
+            const artistLower = candidate.artist.toLowerCase();
+            const titleLower = candidate.title.toLowerCase();
+            const combined = `${artistLower} ${titleLower}`;
+            
+            // Bad patterns that indicate non-album content
+            const badPatterns = [
+              'best album covers',
+              'top ',
+              'the 20 best',
+              'the 10 best',
+              'album covers from',
+              'album covers i find',
+              'album covers i',
+              'r/musicsuggestions',
+              'reddit',
+              'cover.jpg',
+              '.jpg',
+              '.jpeg',
+              '.png',
+              'media/file:',
+              'wiki/',
+              'facebook',
+              'pinterest',
+              'twitter',
+              'instagram',
+              'creative bloq',
+              'tumblr',
+              'blogspot',
+              'view all',
+              'image result',
+              'debut album cover',
+              'album art by',
+              'stock photo',
+              'stock image',
+              'http://',
+              'https://',
+              'www.',
+            ];
+            
+            // Check combined string for bad patterns (catches cases where artist/title are swapped)
+            if (badPatterns.some(p => combined.includes(p))) {
+              return false;
+            }
+            
+            // Reject if title is just "Discogs" or similar
+            if (titleLower === 'discogs' || titleLower === 'releases' || titleLower === 'release' || titleLower === 'reddit') {
+              return false;
+            }
+            
+            // Reject if artist contains "|" (common in web page titles like "Artist | Releases")
+            if (artistLower.includes('|') || titleLower.includes('|')) {
+              return false;
+            }
+            
+            // Reject if both artist and title are very short (likely not real album info)
+            if (artistLower.length < 2 || titleLower.length < 2) {
+              return false;
+            }
+            
+            // Reject if title contains "releases" or "discogs" as a standalone word
+            if (/\b(releases?|discogs)\b/i.test(titleLower)) {
+              return false;
+            }
+            
+            // Reject if title looks like a URL or file path
+            if (titleLower.includes('/') && (titleLower.includes('.') || titleLower.includes('#'))) {
+              return false;
+            }
+            
+            // Reject if artist looks like a title fragment (e.g., "The 20 best album covers from the 70s")
+            if (artistLower.length > 30 && (artistLower.includes('best') || artistLower.includes('top'))) {
+              return false;
+            }
+            
+            return true;
+            });
+          }
+          
+          // Only treat as success if we have valid candidates
+          if (validCandidates.length > 0) {
+            // Normalize candidates into ScanResult structure (same as library flow)
+            const normalizedResult = normalizeScanResult({
+              bestMatch: validCandidates[0],
+              alternates: validCandidates.slice(1),
+              confidence: validCandidates[0].confidence || 0.5,
+            });
+            
+            // Store candidates as suggestions (user can review later)
+            // Use same structure as successful identification for consistency
+            const resultData = JSON.stringify({
+              // Normalized structure (current + alternates)
+              current: normalizedResult.current,
+              alternates: normalizedResult.alternates,
+              // Original structure (for backward compatibility)
+              bestMatch: validCandidates[0],
+              alternates: validCandidates.slice(1),
+              confidence: validCandidates[0].confidence || 0.5, // Use actual confidence from suggestion
+              isSuggestion: true,
+              extractedText: error.extractedText,
+              // Store albumSuggestions metadata for reference
+              albumSuggestions: albumSuggestions.length > 0 ? albumSuggestions : undefined,
+            });
+            await updateBatchPhoto(photo.id, 'success', resultData);
+            completed++;
+          } else {
+            // All candidates were filtered out - treat as failure
+            console.warn(`[BatchProcessing] All candidates filtered out for photo ${photo.id} - treating as failure`);
+            await updateBatchPhoto(
+              photo.id,
+              'error',
+              undefined,
+              'Could not identify album. The candidates found were not valid. Please try manual entry or ensure the album cover is clear and well-lit.'
+            );
+            failed++;
+          }
+        } else {
+          // Hard errors: log as error
+          console.error(`[BatchProcessing] Error identifying photo ${photo.id}:`, error);
+          
+          if (error.code === 'TIMEOUT') {
+            // Timeout - provide helpful error message
+            await updateBatchPhoto(
+              photo.id,
+              'error',
+              undefined,
+              'Request timed out. The backend may be slow or unavailable. Please try again or check your connection.'
+            );
+            failed++;
+          } else {
+            // Other errors
+            await updateBatchPhoto(
+              photo.id,
+              'error',
+              undefined,
+              error.message || 'Identification failed. Please try again or enter manually.'
+            );
+            failed++;
+          }
+        }
       }
 
       // Notify progress after each photo

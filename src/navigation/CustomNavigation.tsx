@@ -1,19 +1,24 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { AppText } from '../components/AppText';
+import { navigationHelpers } from './navigationHelpers';
+
+// Screen imports - direct imports (no circular dependencies since screens import from navigation, not vice versa)
 import { LibraryScreen } from '../screens/LibraryScreen';
 import { StandsScreen } from '../screens/StandsScreen';
 import { ModesScreen } from '../screens/ModesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AddRecordScreen } from '../screens/AddRecordScreen';
 import { RecordDetailScreen } from '../screens/RecordDetailScreen';
+import { EditRecordScreen } from '../screens/EditRecordScreen';
 import { ScanRecordScreen } from '../screens/ScanRecordScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
 import { CSVImportScreen } from '../screens/CSVImportScreen';
 import { BatchScanScreen } from '../screens/BatchScanScreen';
 import { BatchReviewScreen } from '../screens/BatchReviewScreen';
+import { DevTestScreen } from '../screens/DevTestScreen';
 import { RowDetailScreen } from '../screens/RowDetailScreen';
 import { UnitLayoutScreen } from '../screens/UnitLayoutScreen';
 import { LoadModeStartScreen } from '../screens/LoadModeStartScreen';
@@ -36,6 +41,7 @@ type NavigationState = {
 type NavigationContextType = {
   navigate: (screen: string, params?: any) => void;
   goBack: () => void;
+  canGoBack: () => boolean;
   currentScreen: string;
   params: any;
 };
@@ -49,6 +55,7 @@ export const useNavigation = () => {
     return {
       navigate: () => {},
       goBack: () => {},
+      canGoBack: () => false,
       currentScreen: '',
       params: {},
     };
@@ -66,55 +73,56 @@ export const CustomNavigation: React.FC = () => {
   });
 
   const [screenParams, setScreenParams] = useState<Record<string, any>>({});
+  // Use a ref to store params immediately (before React state update)
+  const paramsRef = React.useRef<Record<string, any>>({});
 
   const navigate = (screen: string, params?: any) => {
+    console.log('[CustomNavigation] navigate called:', screen, 'with params:', params);
+    
+    // CRITICAL: Update ref immediately (synchronous) so params are available right away
+    if (params) {
+      paramsRef.current = { ...paramsRef.current, [screen]: params };
+      console.log('[CustomNavigation] ✅ Set params ref for screen:', screen, 'params:', params);
+    } else {
+      const updated = { ...paramsRef.current };
+      delete updated[screen];
+      paramsRef.current = updated;
+    }
+    
+    // Then update React state (async, but ref is already set)
+    if (params) {
+      setScreenParams((prev) => {
+        const updated = { ...prev, [screen]: params };
+        console.log('[CustomNavigation] ✅ Set params state for screen:', screen);
+        return updated;
+      });
+    } else {
+      setScreenParams((prev) => {
+        const updated = { ...prev };
+        delete updated[screen];
+        return updated;
+      });
+    }
+    
+    // Then update navigation state
     setState((prev) => {
       const newState = { ...prev };
       
-      // Handle cross-tab navigation
-      if (screen === 'LibraryHome' || screen.startsWith('Library') || screen === 'AddRecord' || screen === 'RecordDetail' || screen === 'ScanRecord' || screen === 'SongDetail' || screen === 'CSVImport') {
-        newState.currentTab = 'Library';
-        const stackKey = 'libraryStack';
-        if (screen === 'LibraryHome') {
-          newState[stackKey] = ['LibraryHome'];
-        } else {
-          newState[stackKey] = [...newState[stackKey], screen];
-        }
-      } else if (screen === 'RowsHome' || screen === 'RowDetail' || screen === 'UnitLayout') {
-        newState.currentTab = 'Stands';
-        const stackKey = 'standsStack';
-        if (screen === 'RowsHome') {
-          newState[stackKey] = ['RowsHome'];
-        } else {
-          newState[stackKey] = [...newState[stackKey], screen];
-        }
-      } else if (screen === 'ModesHome' || screen.startsWith('LoadMode') || screen.startsWith('CleanupMode') || screen.startsWith('ReorganizeMode')) {
-        newState.currentTab = 'Modes';
-        const stackKey = 'modesStack';
-        if (screen === 'ModesHome') {
-          newState[stackKey] = ['ModesHome'];
-        } else {
-          newState[stackKey] = [...newState[stackKey], screen];
-        }
-      } else if (screen === 'BatchScan' || screen === 'BatchReview') {
-        newState.currentTab = 'Batch';
-        const stackKey = 'batchStack';
-        if (screen === 'BatchScan') {
-          newState[stackKey] = ['BatchScan'];
-        } else {
-          newState[stackKey] = [...newState[stackKey], screen];
-        }
+      // Handle cross-tab navigation using helper
+      const targetTab = navigationHelpers.getTabForScreen(screen);
+      newState.currentTab = targetTab;
+      const stackKey = navigationHelpers.getStackKey(targetTab);
+      const homeScreen = navigationHelpers.getHomeScreenForTab(targetTab);
+      
+      if (screen === homeScreen) {
+        newState[stackKey] = [homeScreen];
       } else {
-        // Default to current tab's stack
-        const stackKey = getStackKey(prev.currentTab);
         newState[stackKey] = [...newState[stackKey], screen];
       }
       
+      console.log('[CustomNavigation] ✅ Updated navigation state, new stack:', newState[stackKey]);
       return newState;
     });
-    if (params) {
-      setScreenParams((prev) => ({ ...prev, [screen]: params }));
-    }
   };
 
   const goBack = () => {
@@ -136,20 +144,13 @@ export const CustomNavigation: React.FC = () => {
     });
   };
 
-  const getStackKey = (tab: RootTab): 'libraryStack' | 'standsStack' | 'modesStack' | 'batchStack' => {
-    switch (tab) {
-      case 'Library':
-        return 'libraryStack';
-      case 'Stands':
-        return 'standsStack';
-      case 'Modes':
-        return 'modesStack';
-      case 'Batch':
-        return 'batchStack';
-      default:
-        return 'libraryStack';
-    }
+  const canGoBack = () => {
+    // Check if we can go back by seeing if the current stack has more than 1 screen
+    const stackKey = getStackKey(state.currentTab);
+    return state[stackKey].length > 1;
   };
+
+  const getStackKey = (tab: RootTab) => navigationHelpers.getStackKey(tab);
 
   const getCurrentScreen = () => {
     if (state.currentTab === 'Settings') {
@@ -161,68 +162,85 @@ export const CustomNavigation: React.FC = () => {
   };
 
   const currentScreen = getCurrentScreen();
-  const params = screenParams[currentScreen] || {};
+  // CRITICAL: Use ref first (immediate), then fall back to state (for React updates)
+  // This ensures params are available even if state hasn't updated yet
+  const params = paramsRef.current[currentScreen] || screenParams[currentScreen] || {};
+  
+  // Debug logging to track params
+  useEffect(() => {
+    console.log('[CustomNavigation] Current screen:', currentScreen, 'params:', params, 'all screenParams:', screenParams);
+  }, [currentScreen, params, screenParams]);
 
   const renderScreen = () => {
     const mockNavigation = {
       navigate,
       goBack,
+      canGoBack,
       currentScreen,
-      params,
+      params, // Include params in navigation object for fallback access
       // Add methods that screens might use
       setOptions: () => {},
       addListener: () => () => {},
     };
 
+    // Ensure params are always an object, never undefined
+    const safeParams = params || {};
+    const routeProps = { navigation: mockNavigation as any, route: { params: safeParams, name: currentScreen } as any };
+    const defaultRouteProps = { navigation: mockNavigation as any, route: { params: {}, name: currentScreen } as any };
+
     switch (currentScreen) {
       // Library screens
       case 'LibraryHome':
-        return <LibraryScreen navigation={mockNavigation as any} route={{ params: {}, name: 'LibraryHome' } as any} />;
+        return <LibraryScreen {...defaultRouteProps} />;
       case 'AddRecord':
-        return <AddRecordScreen navigation={mockNavigation as any} route={{ params, name: 'AddRecord' } as any} />;
+        return <AddRecordScreen {...routeProps} />;
       case 'RecordDetail':
-        return <RecordDetailScreen navigation={mockNavigation as any} route={{ params, name: 'RecordDetail' } as any} />;
+        return <RecordDetailScreen {...routeProps} />;
+      case 'EditRecord':
+        return <EditRecordScreen {...routeProps} />;
       case 'ScanRecord':
-        return <ScanRecordScreen navigation={mockNavigation as any} route={{ params: {}, name: 'ScanRecord' } as any} />;
+        return <ScanRecordScreen {...defaultRouteProps} />;
       case 'SongDetail':
-        return <SongDetailScreen navigation={mockNavigation as any} route={{ params, name: 'SongDetail' } as any} />;
+        return <SongDetailScreen {...routeProps} />;
       case 'CSVImport':
-        return <CSVImportScreen navigation={mockNavigation as any} route={{ params: {}, name: 'CSVImport' } as any} />;
+        return <CSVImportScreen {...defaultRouteProps} />;
       case 'BatchScan':
-        return <BatchScanScreen navigation={mockNavigation as any} route={{ params: {}, name: 'BatchScan' } as any} />;
+        return <BatchScanScreen {...defaultRouteProps} />;
       case 'BatchReview':
-        return <BatchReviewScreen navigation={mockNavigation as any} route={{ params, name: 'BatchReview' } as any} />;
+        return <BatchReviewScreen {...routeProps} />;
+      case 'DevTest':
+        return <DevTestScreen {...defaultRouteProps} />;
       
       // Stands screens
       case 'RowsHome':
-        return <StandsScreen navigation={mockNavigation as any} route={{ params: {}, name: 'RowsHome' } as any} />;
+        return <StandsScreen {...defaultRouteProps} />;
       case 'RowDetail':
-        return <RowDetailScreen navigation={mockNavigation as any} route={{ params, name: 'RowDetail' } as any} />;
+        return <RowDetailScreen {...routeProps} />;
       case 'UnitLayout':
-        return <UnitLayoutScreen navigation={mockNavigation as any} route={{ params, name: 'UnitLayout' } as any} />;
+        return <UnitLayoutScreen {...routeProps} />;
       
       // Modes screens
       case 'ModesHome':
-        return <ModesScreen navigation={mockNavigation as any} route={{ params: {}, name: 'ModesHome' } as any} />;
+        return <ModesScreen {...defaultRouteProps} />;
       case 'LoadModeStart':
-        return <LoadModeStartScreen navigation={mockNavigation as any} route={{ params: {}, name: 'LoadModeStart' } as any} />;
+        return <LoadModeStartScreen {...defaultRouteProps} />;
       case 'LoadModeFlow':
-        return <LoadModeFlowScreen navigation={mockNavigation as any} route={{ params, name: 'LoadModeFlow' } as any} />;
+        return <LoadModeFlowScreen {...routeProps} />;
       case 'CleanupModeHome':
-        return <CleanupModeHomeScreen navigation={mockNavigation as any} route={{ params: {}, name: 'CleanupModeHome' } as any} />;
+        return <CleanupModeHomeScreen {...defaultRouteProps} />;
       case 'CleanupModeFlow':
-        return <CleanupModeFlowScreen navigation={mockNavigation as any} route={{ params, name: 'CleanupModeFlow' } as any} />;
+        return <CleanupModeFlowScreen {...routeProps} />;
       case 'ReorganizeModeStart':
-        return <ReorganizeModeStartScreen navigation={mockNavigation as any} route={{ params: {}, name: 'ReorganizeModeStart' } as any} />;
+        return <ReorganizeModeStartScreen {...defaultRouteProps} />;
       case 'ReorganizeModeFlow':
-        return <ReorganizeModeFlowScreen navigation={mockNavigation as any} route={{ params, name: 'ReorganizeModeFlow' } as any} />;
+        return <ReorganizeModeFlowScreen {...routeProps} />;
       
       // Settings
       case 'Settings':
         return <SettingsScreen />;
       
       default:
-        return <LibraryScreen navigation={mockNavigation as any} route={{ params: {}, name: 'LibraryHome' } as any} />;
+        return <LibraryScreen {...defaultRouteProps} />;
     }
   };
 
@@ -253,23 +271,10 @@ export const CustomNavigation: React.FC = () => {
     setScreenParams({});
   };
 
-  const getHomeScreenForTab = (tab: RootTab): string => {
-    switch (tab) {
-      case 'Library':
-        return 'LibraryHome';
-      case 'Stands':
-        return 'RowsHome';
-      case 'Modes':
-        return 'ModesHome';
-      case 'Batch':
-        return 'BatchScan';
-      default:
-        return 'LibraryHome';
-    }
-  };
+  const getHomeScreenForTab = (tab: RootTab) => navigationHelpers.getHomeScreenForTab(tab);
 
   return (
-    <NavigationContext.Provider value={{ navigate, goBack, currentScreen, params }}>
+    <NavigationContext.Provider value={{ navigate, goBack, canGoBack, currentScreen, params }}>
       <View style={styles.container}>
         <View style={styles.content}>{renderScreen()}</View>
         <View

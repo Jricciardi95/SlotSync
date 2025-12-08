@@ -1,6 +1,7 @@
 export * from './LibraryScreen';
 export * from './AddRecordScreen';
 export * from './RecordDetailScreen';
+export * from './EditRecordScreen';
 export * from './StandsScreen';
 export * from './ModesScreen';
 export * from './SettingsScreen';
@@ -15,3 +16,4 @@ export * from './ReorganizeModeFlowScreen';
 export * from './ScanRecordScreen';
 export * from './SongDetailScreen';
 export * from './CSVImportScreen';
+export * from './DevTestScreen';

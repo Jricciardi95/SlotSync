@@ -1,0 +1,29 @@
+# SlotSync - Copy & Paste Commands
+# Your IP: 192.168.1.129
+
+# ============================================
+# TERMINAL 1 - BACKEND (Copy all lines below)
+# ============================================
+
+cd /Users/jamesricciardi/SlotSync/backend-example
+export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export GOOGLE_APPLICATION_CREDENTIALS='/Users/jamesricciardi/SlotSync/backend-example/credentials.json'
+export CONFIDENCE_THRESHOLD='0.5'
+npm start
+
+# ============================================
+# TERMINAL 2 - FRONTEND (Copy all lines below)
+# ============================================
+
+cd /Users/jamesricciardi/SlotSync
+export EXPO_PUBLIC_DEBUG_IDENTIFICATION=true
+export EXPO_PUBLIC_API_BASE_URL='http://192.168.1.129:3000'
+npx expo start
+
+# ============================================
+# OPTIONAL - Test Backend (Terminal 3)
+# ============================================
+
+curl http://localhost:3000/health
+curl http://localhost:3000/api/ping
+

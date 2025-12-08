@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -35,6 +35,7 @@ import {
   updateTrack,
   deleteRecord,
 } from '../data/repository';
+import { identifyRecord } from '../services/RecordIdentificationService';
 import {
   RecordModel,
   RecordLocationDetails,
@@ -45,18 +46,68 @@ import {
 } from '../data/types';
 import { LibraryStackParamList } from '../navigation/types';
 import { setSlotLight } from '../services/ShelfLightingClient';
+import { AppIconButton } from '../components/AppIconButton';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'RecordDetail'>;
 
 export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { colors, spacing, radius } = useTheme();
-  const { recordId } = route.params;
+  // Get recordId from route params, with fallback to navigation params (for custom navigation)
+  const recordId = route.params?.recordId || (navigation as any).params?.recordId;
+  // Get returnToTab to restore the correct tab when going back
+  const returnToTab = route.params?.returnToTab || (navigation as any).params?.returnToTab;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[RecordDetail] Mounted with params:', {
+      routeParams: route.params,
+      navParams: (navigation as any).params,
+      recordId,
+      hasRecordId: !!recordId,
+      returnToTab,
+    });
+  }, [recordId, returnToTab]);
+
+  // CRITICAL: Guard against missing recordId in route params
+  // Use useEffect to navigate (can't call navigation during render)
+  useEffect(() => {
+    if (!recordId) {
+      console.error('[RecordDetail] Missing recordId in route params, navigating back', {
+        routeParams: route.params,
+        navParams: (navigation as any).params,
+      });
+      // Navigate back if we can, otherwise go to LibraryHome
+      // Use setTimeout to ensure this happens after render
+      setTimeout(() => {
+        if (navigation.canGoBack && navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('LibraryHome');
+        }
+      }, 100);
+    }
+  }, [recordId, navigation]);
+
+  // Show error UI if recordId is missing (instead of returning null during render)
+  if (!recordId) {
+    return (
+      <AppScreen title="Album Details">
+        <View style={styles.loadingState}>
+          <AppText variant="body">Invalid album ID. Please try again.</AppText>
+        </View>
+      </AppScreen>
+    );
+  }
 
   const [record, setRecord] = useState<RecordModel | null>(null);
   const [location, setLocation] = useState<RecordLocationDetails | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
+  // Track whether we've successfully loaded this record at least once
+  // Once loaded, we never show the full-screen spinner again (even on navigation back)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [lighting, setLighting] = useState(false);
+  const [fetchingTracks, setFetchingTracks] = useState(false);
 
   const [assignVisible, setAssignVisible] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
@@ -66,26 +117,88 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showSpinner = true) => {
+    console.log('[RecordDetail] load() called', {
+      showSpinner,
+      hasRecord: !!record,
+      recordId: record?.id,
+      expectedRecordId: recordId,
+    });
+    
+    // Only set loading if we don't have record data yet, or if explicitly requested
+    // CRITICAL: Never show spinner if we already have record data (prevents spinner on navigation back)
+    if (showSpinner && (!record || record.id !== recordId)) {
+      console.log('[RecordDetail] Setting loading=true (showSpinner=true, no record data)');
+      setLoading(true);
+    } else {
+      // If we have record data, ensure loading is false to prevent any spinner flash
+      console.log('[RecordDetail] Setting loading=false (have record data or showSpinner=false)');
+      setLoading(false);
+    }
     try {
       const [recordData, locationData, tracksData] = await Promise.all([
         getRecordById(recordId),
         getRecordLocationDetails(recordId),
         getTracksByRecord(recordId),
       ]);
-      setRecord(recordData);
+      console.log('[RecordDetail] Loaded record:', {
+        id: recordData?.id,
+        artist: recordData?.artist,
+        title: recordData?.title,
+        year: recordData?.year,
+        tracksCount: tracksData.length,
+        tracks: tracksData,
+      });
+      // CRITICAL: Only update record if we got valid data
+      // This prevents clearing the record state if the API call fails
+      // Also, preserve existing record if new data is null/undefined (defensive)
+      if (recordData) {
+        setRecord(recordData);
+        // ✅ Mark that we've loaded this record at least once
+        // This ensures we never show the full-screen spinner after the first successful load
+        setHasLoadedOnce(true);
+        console.log('[RecordDetail] ✅ Record loaded successfully, hasLoadedOnce=true');
+      } else if (!recordData && record) {
+        // If API returns null but we have existing record, keep the existing record
+        // This prevents clearing record state on failed API calls
+        console.warn('[RecordDetail] API returned null record, preserving existing record data');
+      }
       setLocation(locationData);
       setTracks(tracksData);
+    } catch (error) {
+      console.error('[RecordDetail] Error loading record:', error);
+      // Don't clear record state on error - keep existing data
     } finally {
+      console.log('[RecordDetail] load() completed, setting loading=false');
       setLoading(false);
     }
-  }, [recordId]);
+  }, [recordId, record]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      console.log('[RecordDetail] useFocusEffect triggered', {
+        hasLoadedOnce,
+        hasRecord: !!record,
+        recordId: record?.id,
+        expectedRecordId: recordId,
+        loading,
+      });
+      
+      if (!hasLoadedOnce) {
+        // First time we ever open this record → allow full-screen spinner
+        console.log('[RecordDetail] First load - allowing full-screen spinner');
+        load(true);
+      } else {
+        // Coming back from edit or navigating again to the same record:
+        // show existing UI immediately and just refresh in the background
+        console.log('[RecordDetail] Returning to already-loaded record - refreshing in background (no spinner)');
+        setLoading(false);
+        load(false).catch(err => {
+          console.error('[RecordDetail] Background refresh failed:', err);
+          // Don't show error to user - just log it
+        });
+      }
+    }, [load, hasLoadedOnce])
   );
 
   const openAssign = async () => {
@@ -108,6 +221,102 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setSelectedRow(null);
     setSelectedUnit(null);
     setSlotGroups([]);
+  };
+
+  const handleFetchTracks = async () => {
+    if (!record || !record.coverImageLocalUri) {
+      Alert.alert('Error', 'No cover image available to identify tracks.');
+      return;
+    }
+
+    setFetchingTracks(true);
+    try {
+      console.log(`[RecordDetail] Fetching tracks for ${record.artist} - ${record.title}`);
+      console.log(`[RecordDetail] Image URI: ${record.coverImageLocalUri}`);
+      // Don't pass abort signal - let it complete fully
+      const response = await identifyRecord(record.coverImageLocalUri);
+      
+      console.log(`[RecordDetail] Response received:`, {
+        hasBestMatch: !!response.bestMatch,
+        artist: response.bestMatch?.artist,
+        title: response.bestMatch?.title,
+        hasTracks: !!response.bestMatch?.tracks,
+        tracksCount: response.bestMatch?.tracks?.length || 0,
+        tracksArray: JSON.stringify(response.bestMatch?.tracks || []),
+      });
+      
+      if (response.bestMatch.tracks && response.bestMatch.tracks.length > 0) {
+        console.log(`[RecordDetail] ✅ Received ${response.bestMatch.tracks.length} tracks from API`);
+        console.log(`[RecordDetail] Track list:`, response.bestMatch.tracks.map((t, i) => `${i + 1}. ${t.title}`).join(', '));
+        
+        // Save tracks to database
+        let savedCount = 0;
+        let failedCount = 0;
+        for (const track of response.bestMatch.tracks) {
+          try {
+            if (!track.title || !track.title.trim()) {
+              console.warn(`[RecordDetail] ⚠️ Skipping track with empty title`);
+              continue;
+            }
+            await createTrack({
+              recordId: recordId,
+              title: track.title.trim(),
+              trackNumber: track.trackNumber ?? undefined,
+              discNumber: track.discNumber ?? undefined,
+              side: track.side ?? undefined,
+              durationSeconds: track.durationSeconds ?? undefined,
+            });
+            savedCount++;
+            console.log(`[RecordDetail] ✅ Saved track ${savedCount}: "${track.title}"`);
+          } catch (error) {
+            failedCount++;
+            console.error(`[RecordDetail] ❌ Failed to save track "${track.title}":`, error);
+          }
+        }
+        
+        console.log(`[RecordDetail] Successfully saved ${savedCount}/${response.bestMatch.tracks.length} tracks`);
+        if (failedCount > 0) {
+          console.warn(`[RecordDetail] ⚠️ Failed to save ${failedCount} tracks`);
+        }
+        
+        // Reload tracks from database
+        const updatedTracks = await getTracksByRecord(recordId);
+        setTracks(updatedTracks);
+        console.log(`[RecordDetail] ✅ Reloaded ${updatedTracks.length} tracks from database`);
+        
+        if (savedCount > 0) {
+          Alert.alert('Success', `Added ${savedCount} track${savedCount > 1 ? 's' : ''} to this album.`);
+        } else if (failedCount > 0) {
+          Alert.alert('Error', `Found ${response.bestMatch.tracks.length} tracks but could not save them. Please try again.`);
+        } else {
+          Alert.alert('Info', 'Tracks were found but could not be saved.');
+        }
+      } else {
+        console.warn(`[RecordDetail] ⚠️  No tracks in response!`);
+        console.warn(`[RecordDetail] Response structure:`, {
+          hasBestMatch: !!response.bestMatch,
+          bestMatchKeys: response.bestMatch ? Object.keys(response.bestMatch) : [],
+          tracksValue: response.bestMatch?.tracks,
+          tracksType: typeof response.bestMatch?.tracks,
+          tracksLength: response.bestMatch?.tracks?.length,
+          fullResponse: JSON.stringify(response, null, 2),
+        });
+        Alert.alert(
+          'No Tracks Found', 
+          'Could not find track information for this album. The backend may not have track data, or the album may not be in Discogs.\n\nYou can add tracks manually by editing the album.'
+        );
+      }
+    } catch (error: any) {
+      console.error('[RecordDetail] Failed to fetch tracks:', error);
+      Alert.alert(
+        'Error',
+        error.code === 'LOW_CONFIDENCE' && error.candidates
+          ? 'Could not identify album with sufficient confidence. Try editing the album manually.'
+          : 'Failed to fetch tracks. Please try again or add tracks manually.'
+      );
+    } finally {
+      setFetchingTracks(false);
+    }
   };
 
   const handleSelectRow = async (row: Row) => {
@@ -300,7 +509,15 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       : `${location.slotNumbers[0]}`;
   }, [location]);
 
-  if (loading || !record) {
+  // Only show the full-screen spinner before the first successful load
+  // Once we've loaded the record at least once, we never show the spinner again
+  // (even when navigating back from edit screen)
+  if (loading && !hasLoadedOnce) {
+    console.log('[RecordDetail] Showing full-screen spinner (first load)', {
+      loading,
+      hasLoadedOnce,
+      hasRecord: !!record,
+    });
     return (
       <AppScreen title="Album Details">
         <View style={styles.loadingState}>
@@ -309,10 +526,73 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </AppScreen>
     );
   }
+  
+  // If we still somehow have no record after loading finished,
+  // show a proper "Record not found" message instead of an endless spinner
+  // BUT: Only show this if we've never successfully loaded this record before
+  // This prevents "not found" when returning from edit screen
+  if (!record && !loading && !hasLoadedOnce) {
+    console.log('[RecordDetail] Record not found after load completed (never loaded before)');
+    return (
+      <AppScreen title="Album Details">
+        <View style={styles.loadingState}>
+          <AppText variant="body">Album not found.</AppText>
+        </View>
+      </AppScreen>
+    );
+  }
+  
+  // CRITICAL: If we have record data, always show the UI
+  // This ensures we never show a spinner when navigating back from edit
+  // If record is null but we've loaded once, it means we're refreshing - show existing data or wait
+  if (!record && hasLoadedOnce) {
+    console.log('[RecordDetail] Record temporarily null but hasLoadedOnce=true - showing loading state');
+    // Show a minimal loading state while refreshing, but don't show "not found"
+    return (
+      <AppScreen title="Album Details">
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={colors.accent} />
+          <AppText variant="body" style={{ marginTop: spacing.md }}>
+            Refreshing...
+          </AppText>
+        </View>
+      </AppScreen>
+    );
+  }
+
+  // If we have record data, proceed to render the album details
+  if (!record) {
+    // This should only happen if we've never loaded and loading is false
+    // (handled by the "not found" check above)
+    return null;
+  }
 
   return (
     <>
       <AppScreen title={record.title} subtitle={record.artist}>
+        <View style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000 }}>
+          <AppIconButton
+            name="arrow-back"
+            onPress={() => {
+              // Always use goBack() - LibraryScreen will restore tab from lastTabBeforeNavigationRef
+              // The ref is set before navigation, so it will be available when LibraryScreen comes into focus
+              console.log('[RecordDetail] Back button pressed, returnToTab:', returnToTab);
+              
+              if (navigation.canGoBack()) {
+                console.log('[RecordDetail] Using goBack() - LibraryScreen will restore tab from ref');
+                navigation.goBack();
+              } else {
+                console.warn('[RecordDetail] Cannot go back, navigating to LibraryHome');
+                // If we can't go back, navigate with returnToTab as fallback
+                if (returnToTab) {
+                  navigation.navigate('LibraryHome', { returnToTab } as any);
+                } else {
+                  navigation.navigate('LibraryHome');
+                }
+              }
+            }}
+          />
+        </View>
         <View style={{ gap: spacing.lg }}>
           {/* Swipeable delete container */}
           <View style={{ position: 'relative', overflow: 'hidden' }}>
@@ -328,27 +608,29 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 {...panResponder.panHandlers}
               >
               <AppCard style={{ gap: spacing.md }}>
-                {record.coverImageRemoteUrl || record.coverImageLocalUri ? (
-                  <Image
-                    source={{ 
-                      uri: record.coverImageRemoteUrl || record.coverImageLocalUri || ''
-                    }}
-                    style={styles.detailCover}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.detailCover,
-                      {
-                        backgroundColor: colors.backgroundMuted,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      },
-                    ]}
-                  >
-                    <AppText variant="caption">No cover yet</AppText>
-                  </View>
-                )}
+                {(() => {
+                  const { getCoverImageUri } = require('../utils/imageSelection');
+                  const imageUri = getCoverImageUri(record.coverImageRemoteUrl, record.coverImageLocalUri);
+                  return imageUri ? (
+                    <Image
+                      source={{ uri: imageUri }}
+                      style={styles.detailCover}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.detailCover,
+                        {
+                          backgroundColor: colors.backgroundMuted,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        },
+                      ]}
+                    >
+                      <AppText variant="caption">No cover yet</AppText>
+                    </View>
+                  );
+                })()}
                 {record.year && (
                   <AppText variant="body">Year: {record.year}</AppText>
                 )}
@@ -380,6 +662,32 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               </TouchableOpacity>
             )}
           </View>
+
+          <AppCard style={{ gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+              <AppText variant="subtitle">Album Info</AppText>
+              <AppIconButton
+                name="create-outline"
+                onPress={() => navigation.navigate('EditRecord', { recordId: recordId })}
+              />
+            </View>
+            <AppText variant="body">
+              <AppText variant="body" style={{ fontWeight: '600' }}>Artist:</AppText> {record.artist}
+            </AppText>
+            <AppText variant="body">
+              <AppText variant="body" style={{ fontWeight: '600' }}>Title:</AppText> {record.title}
+            </AppText>
+            {record.year && (
+              <AppText variant="body">
+                <AppText variant="body" style={{ fontWeight: '600' }}>Year:</AppText> {record.year}
+              </AppText>
+            )}
+            {record.genre && (
+              <AppText variant="body">
+                <AppText variant="body" style={{ fontWeight: '600' }}>Genre:</AppText> {record.genre}
+              </AppText>
+            )}
+          </AppCard>
 
           <AppCard style={{ gap: spacing.sm }}>
             <AppText variant="subtitle">Location</AppText>
@@ -416,22 +724,32 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </AppCard>
 
           <AppCard style={{ gap: spacing.sm }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
               <AppText variant="subtitle">Tracks</AppText>
-              <AppButton
-                title="Delete Album"
-                variant="ghost"
-                onPress={handleDelete}
-                style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }}
-              />
+              {tracks.length === 0 && record.coverImageLocalUri && (
+                <AppButton
+                  title={fetchingTracks ? "Fetching..." : "Fetch Tracks"}
+                  variant="secondary"
+                  onPress={handleFetchTracks}
+                  disabled={fetchingTracks}
+                  style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs }}
+                />
+              )}
             </View>
-            {tracks.length === 0 ? (
+            {fetchingTracks ? (
+              <View style={{ padding: spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: spacing.xs }}>
+                  Fetching track list...
+                </AppText>
+              </View>
+            ) : tracks.length === 0 ? (
               <AppText variant="caption" style={{ color: colors.textSecondary }}>
                 No tracks added yet. Tracks can be populated automatically from the identification service or added manually.
               </AppText>
             ) : (
               <View style={{ gap: spacing.xs }}>
-                {tracks.map((track) => (
+                {tracks.map((track, idx) => (
                   <View
                     key={track.id}
                     style={{
@@ -441,16 +759,11 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     }}
                   >
                     <AppText variant="body">
-                      {track.trackNumber && `${track.trackNumber}. `}
+                      {track.trackNumber ? `${track.trackNumber}. ` : `${idx + 1}. `}
                       {track.title}
                     </AppText>
-                    {track.side && (
-                      <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                        Side {track.side}
-                      </AppText>
-                    )}
                     {track.durationSeconds && (
-                      <AppText variant="caption" style={{ color: colors.textSecondary }}>
+                      <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: spacing.xs }}>
                         {Math.floor(track.durationSeconds / 60)}:{(track.durationSeconds % 60).toString().padStart(2, '0')}
                       </AppText>
                     )}
@@ -459,6 +772,24 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             )}
           </AppCard>
+
+          {/* Delete button at bottom - red */}
+          <TouchableOpacity
+            onPress={handleDelete}
+            style={{
+              backgroundColor: '#FF3B30',
+              paddingVertical: spacing.md,
+              paddingHorizontal: spacing.lg,
+              borderRadius: radius.md,
+              alignItems: 'center',
+              marginTop: spacing.lg,
+            }}
+            activeOpacity={0.8}
+          >
+            <AppText variant="body" style={{ color: 'white', fontWeight: '600' }}>
+              Delete Album
+            </AppText>
+          </TouchableOpacity>
         </View>
       </AppScreen>
 

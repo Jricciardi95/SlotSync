@@ -51,7 +51,7 @@ export const AppButton: React.FC<AppButtonProps> = ({
             ? colors.backgroundMuted
             : backgroundByVariant[variant],
           borderRadius: radius.lg,
-          paddingVertical: spacing.sm + 2,
+          paddingVertical: spacing.sm,
           paddingHorizontal: spacing.xl,
           borderWidth: variant === 'ghost' ? 1 : 0,
           borderColor:

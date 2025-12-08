@@ -26,6 +26,7 @@ export const AppScreen: React.FC<AppScreenProps> = ({
   contentStyle,
 }) => {
   const { colors, spacing } = useTheme();
+  const styles = createStyles(spacing);
 
   const Header = () =>
     title ? (
@@ -77,7 +78,9 @@ export const AppScreen: React.FC<AppScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+// Styles are defined inline with theme values to ensure spacing is always available
+// This avoids StyleSheet.create issues with dynamic theme values
+const createStyles = (spacing: typeof theme.spacing) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -89,15 +92,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: spacing.xs, // Use theme spacing instead of hardcoded 4
     textAlign: 'center',
   },
   content: {
     flexGrow: 1,
-    paddingTop: 48,
+    paddingTop: spacing.xxl + spacing.lg, // 32 + 16 = 48, using theme values
   },
   inner: {
     flex: 1,
-    gap: 16,
+    gap: spacing.lg, // Use theme spacing instead of hardcoded 16
   },
 });

@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppScreen } from '../components/AppScreen';
 import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
+import { AppIconButton } from '../components/AppIconButton';
 import { useTheme } from '../hooks/useTheme';
 import { LibraryStackParamList } from '../navigation/types';
 import { getRecordsByTrackTitle } from '../data/repository';
@@ -30,13 +31,22 @@ export const SongDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      loadRecords();
+      // Only reload if we're actually focused (not just coming back from navigation)
+      // This prevents the "No albums found" issue when navigating back
+      const timeoutId = setTimeout(() => {
+        loadRecords();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }, [loadRecords])
   );
 
   if (loading) {
     return (
       <AppScreen title={trackTitle}>
+        <View style={styles.headerActions}>
+          <AppIconButton name="arrow-back" onPress={() => navigation.goBack()} />
+        </View>
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
@@ -46,6 +56,9 @@ export const SongDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return (
     <AppScreen title={trackTitle} subtitle={`Albums containing this song`} scroll={false}>
+      <View style={styles.headerActions}>
+        <AppIconButton name="arrow-back" onPress={() => navigation.goBack()} />
+      </View>
       <FlatList
         data={records}
         keyExtractor={(item) => item.id}
@@ -69,9 +82,16 @@ export const SongDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <AppText
                 variant="caption"
                 style={{ color: colors.accent }}
-                onPress={() =>
-                  navigation.navigate('RecordDetail', { recordId: item.id })
-                }
+                onPress={() => {
+                  // Get returnToTab from route params (passed from LibraryScreen when navigating to SongDetail)
+                  // If not available, default to 'SONGS' as fallback
+                  const returnToTab = (route.params as any)?.returnToTab || 'SONGS';
+                  console.log('[SongDetail] Navigating to RecordDetail, returnToTab:', returnToTab);
+                  navigation.navigate('RecordDetail', { 
+                    recordId: item.id,
+                    returnToTab: returnToTab, // Use the tab we came from (SONGS or ALL)
+                  });
+                }}
               >
                 View Album →
               </AppText>
@@ -96,6 +116,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 48,
+  },
+  headerActions: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
   },
 });
 
