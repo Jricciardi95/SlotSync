@@ -113,11 +113,12 @@ function convertDiscogsTracks(discogsTracks: Array<{
     .filter(t => t.title && t.title.trim())
     .map((t, index) => {
       const position = parseDiscogsPosition(t.position);
+      const duration = parseDuration(t.duration);
       return {
         title: t.title.trim(),
         position: position.trackNumber || index + 1,
         side: position.side,
-        durationSeconds: parseDuration(t.duration),
+        durationSeconds: duration !== null ? duration : undefined,
       };
     });
 }
@@ -138,7 +139,7 @@ function convertMusicBrainzTracks(mbTracks: Array<{
     title: t.title.trim(),
     position: t.position,
     discNumber: t.discNumber,
-    durationSeconds: t.durationMs ? Math.floor(t.durationMs / 1000) : null,
+    durationSeconds: t.durationMs ? Math.floor(t.durationMs / 1000) : undefined,
   }));
 }
 

@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+.env.backup
+.env.save
+.env.tmp
+# Allow .env.example (template file)
+!.env.example
 
 # Google Cloud credentials
 backend-example/credentials.json
@@ -43,6 +48,9 @@ backend-example/*-*.json
 # Backend database
 backend-example/identified_records.db
 backend-example/*.db
+
+# Backend temp uploads
+backend-example/temp/
 
 # typescript
 *.tsbuildinfo

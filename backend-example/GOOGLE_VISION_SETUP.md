@@ -25,7 +25,6 @@ This guide walks you through setting up Google Cloud Vision API for SlotSync rec
 5. Wait for activation (usually instant)
 
 ## Step 3: Create Service Account
-
 1. Go to **IAM & Admin** → **Service Accounts**
 2. Click **Create Service Account**
 3. Enter details:

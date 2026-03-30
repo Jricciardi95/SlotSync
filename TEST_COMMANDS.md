@@ -1,226 +1,181 @@
-# Testing Commands - SlotSync
+# 🧪 Testing Commands - Upgraded Identification System
 
-## Quick Start
+## Quick Test Guide
 
-### Terminal 1 - Backend Server
+### Step 1: Verify Backend Server is Running
 
 ```bash
+# Check if server is running
+curl http://localhost:3000/health
+
+# Expected output:
+# {"status":"ok","timestamp":"...","services":{"googleVision":"configured","discogs":"not configured","localDatabase":"connected"}}
+
+# Test ping endpoint
+curl http://localhost:3000/api/ping
+
+# Expected output:
+# {"status":"ok","timestamp":"...","server":"SlotSync API","version":"1.0.0"}
+```
+
+### Step 2: Test Identification Endpoint (Backend)
+
+```bash
+# Test with a sample image (replace with path to an album cover image)
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
-export ENABLE_GOOGLE_VISION='true'
-export OPENAI_API_KEY='sk-your-key-here'
-export ENABLE_GPT4_VISION='true'
-export ENABLE_IMAGE_PREPROCESSING='true'
-export ENABLE_IMAGE_EMBEDDINGS='true'
-export CONFIDENCE_THRESHOLD='0.5'
+
+# Test identification endpoint
+curl -X POST http://localhost:3000/api/identify-record \
+  -F "image=@/path/to/your/album-cover.jpg" \
+  -H "Content-Type: multipart/form-data" | jq
+
+# Or test with manual text input
+curl -X POST http://localhost:3000/api/identify-record \
+  -H "Content-Type: application/json" \
+  -d '{"artist":"Taylor Swift","title":"1989"}' | jq
+```
+
+### Step 3: Start Frontend (Expo)
+
+**Terminal 1: Backend (if not already running)**
+```bash
+cd /Users/jamesricciardi/SlotSync/backend-example
+
+# Set environment variables (if needed)
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your-token-here'
+export GOOGLE_APPLICATION_CREDENTIALS='/Users/jamesricciardi/SlotSync/backend-example/credentials.json'
+
+# Start backend
 npm start
 ```
 
-**⚠️ IMPORTANT:** Replace `'sk-your-key-here'` with your actual OpenAI API key!
-
----
-
-### Terminal 2 - Frontend (Expo)
-
+**Terminal 2: Frontend (Expo)**
 ```bash
 cd /Users/jamesricciardi/SlotSync
-npx expo start
+
+# Verify API URL is set (should be in app.json already)
+# Your IP: 192.168.1.215
+# API URL should be: http://192.168.1.215:3000
+
+# Start Expo
+npx expo start --clear
+
+# Then:
+# - Press 'i' for iOS simulator
+# - Press 'a' for Android emulator
+# - Scan QR code with Expo Go app on your phone
 ```
 
-Then scan the QR code with **Expo Go** app on your phone.
+### Step 4: Test in Expo Go
 
----
+1. **Open Expo Go** on your phone
+2. **Scan the QR code** from Terminal 2
+3. **Navigate to Scan Record** screen
+4. **Take a photo** of an album cover or select from library
+5. **Watch the identification process**:
+   - Should show loading state
+   - OCR-first extraction (primary)
+   - Embedding similarity search
+   - Discogs scoring with dual thresholds
+   - Final result or suggestions
 
-## Expected Output
+### Step 5: Verify New Features
 
-### Terminal 1 (Backend) - Success:
+**Check logs in Terminal 1 (Backend)** - You should see:
 ```
-[GPT-4 Vision] ✅ OpenAI client initialized
-[Image Embedding] ✅ OpenAI client initialized
-[Config] ⚙️  Confidence threshold: 0.5
-[Config] ✅ GPT-4 Vision enabled
-[Config] ✅ Image Embeddings enabled
-[Config] ✅ Image Preprocessing enabled
-[Config] 📊 Stored embeddings: 0
-✅ Google Vision API client initialized
-✅ Database tables ready (records + embeddings)
-🚀 SlotSync API Server (Enhanced) running on port 3000
-📍 Health check: http://localhost:3000/health
-✅ Ready to identify records!
+[Phase1] 🎨 Computing image embedding...
+[Phase1] ✅ Image embedding computed
+[Phase1] 🔍 Found X similar covers via vector search
+[Phase1] 📝 PRIMARY: Parsing OCR text...
+[Phase1] ✅ OCR PRIMARY: "Artist" - "Album"
+[Phase2] 📊 Scoring X Discogs releases...
+[Phase2] 📊 Grouped into X canonical albums
+[Phase2] 📊 Response type: auto_accept (best score: 0.XXX)
 ```
 
-### Terminal 2 (Frontend) - Success:
+**Check logs in Terminal 2 (Frontend)** - Should show:
 ```
-› Metro waiting on exp://192.168.x.x:8081
-› Scan the QR code above with Expo Go
+[IDENTIFICATION] Starting album identification...
+[IDENTIFICATION] Image hash: XXXXX...
+[IDENTIFICATION] ✅ Cache hit! (if cached)
+or
+[IDENTIFICATION] Calling backend API...
 ```
 
----
+### Step 6: Test Edge Cases
 
-## Testing Steps
+**Test 1: Low-text cover (embeddings should help)**
+```bash
+# Use an album cover with minimal text
+# Embeddings should find similar covers even without OCR
+```
 
-1. **Start Backend** (Terminal 1)
-   - Wait for "✅ Ready to identify records!"
-   - Keep this terminal open
+**Test 2: Multiple variants (grouping should work)**
+```bash
+# Use an album that has many Discogs releases (e.g., "Abbey Road")
+# Should group variants and pick best one
+```
 
-2. **Start Frontend** (Terminal 2)
-   - Wait for QR code to appear
-   - Keep this terminal open
+**Test 3: Noisy web page in background**
+```bash
+# Use an image with web page text visible
+# Web noise filter should remove it
+```
 
-3. **Open Expo Go** on your phone
-   - Install from App Store / Google Play if needed
-   - Make sure phone and computer are on same Wi-Fi
+### Step 7: Check Database
 
-4. **Scan QR Code**
-   - Open Expo Go app
-   - Tap "Scan QR code"
-   - Point camera at QR code in Terminal 2
-   - App will load automatically
+```bash
+cd /Users/jamesricciardi/SlotSync/backend-example
 
-5. **Test Album Identification**
-   - In the app, tap **"Scan Record"** or camera icon
-   - Take a photo of an album cover (or select from gallery)
-   - Wait for identification (watch spinner)
+# Check if embeddings are being stored
+sqlite3 identified_records.db "SELECT COUNT(*) FROM cover_embeddings;"
 
-6. **Watch Backend Logs** (Terminal 1)
-   - You should see processing steps:
-     ```
-     [API] 📸 Image received: ...
-     [API] 🎨 Preprocessing image for better OCR...
-     [API] 🎨 Checking for similar albums using embeddings...
-     [API] 🔍 Starting Google Vision analysis...
-     [API] ✅ GPT-4 Vision identified: "Artist" - "Title"
-     [API] ✅ ✅ ✅ IDENTIFICATION SUCCESS ✅ ✅ ✅
-     ```
+# Check feedback logs
+sqlite3 identified_records.db "SELECT COUNT(*) FROM identification_feedback;"
 
----
-
-## What to Test
-
-### ✅ Basic Functionality
-- [ ] App loads in Expo Go
-- [ ] Camera opens when tapping "Scan Record"
-- [ ] Photo can be taken or selected from gallery
-- [ ] Identification process shows spinner
-- [ ] Results appear after identification
-
-### ✅ Identification Features
-- [ ] Clear album covers are identified correctly
-- [ ] Artist and title are extracted
-- [ ] Track list is fetched (if available)
-- [ ] Cover image is displayed
-- [ ] Results can be saved to library
-
-### ✅ Advanced Features (if enabled)
-- [ ] Image preprocessing improves OCR accuracy
-- [ ] Embedding database finds similar albums
-- [ ] GPT-4 Vision handles difficult covers
-- [ ] Previously identified albums match faster
-
----
+# View recent identifications
+sqlite3 identified_records.db "SELECT artist, title, discogs_id, created_at FROM identified_records ORDER BY created_at DESC LIMIT 5;"
+```
 
 ## Troubleshooting
 
-### Backend Won't Start
-
-**Error: Port 3000 already in use**
+**Backend not starting?**
 ```bash
-# Find and kill process using port 3000
-lsof -ti:3000 | xargs kill -9
-# Then try npm start again
-```
+# Kill any existing processes
+pkill -f "node.*server-hybrid"
 
-**Error: Module not found**
-```bash
+# Check port 3000
+lsof -i :3000
+
+# Start fresh
 cd /Users/jamesricciardi/SlotSync/backend-example
-npm install
+npm start
 ```
 
-**Error: OpenAI API key invalid**
-- Check that `OPENAI_API_KEY` is set correctly
-- Verify the key starts with `sk-` and is valid
-- Check OpenAI dashboard for usage/errors
-
----
-
-### Expo Won't Connect
-
-**QR Code doesn't work**
-- Make sure phone and computer are on same Wi-Fi network
-- Try pressing `s` in Terminal 2 to switch to development build
-- Or manually enter the URL shown in Terminal 2
-
-**App won't load**
-- Press `r` in Terminal 2 to reload
-- Restart Expo: `Ctrl+C` then `npx expo start` again
-- Clear Expo Go cache: Settings → Clear cache
-
-**Connection timeout**
-- Check firewall isn't blocking port 8081
-- Try using tunnel mode: `npx expo start --tunnel`
-
----
-
-### Identification Not Working
-
-**No results returned**
-- Check backend logs in Terminal 1 for errors
-- Verify Google Vision API is enabled
-- Check image quality (should be clear, well-lit, full cover visible)
-
-**Wrong album identified**
-- Try a clearer photo
-- Ensure full album cover is visible
-- Check backend logs for confidence scores
-- Lower `CONFIDENCE_THRESHOLD` if too strict
-
-**Timeout errors**
-- Image might be too large - try resizing
-- Check network connection
-- Verify backend is running and accessible
-
----
-
-## Optional: Test Individual Features
-
-### Test Image Preprocessing
+**Expo can't connect to backend?**
 ```bash
-# In Terminal 1, watch for:
-[API] 🎨 Preprocessing image for better OCR...
-[API] ✅ Image preprocessing complete in XXXms
+# Verify IP address
+ifconfig | grep "inet " | grep -v 127.0.0.1
+
+# Update app.json with correct IP
+# Then restart Expo with --clear flag
+npx expo start --clear
 ```
 
-### Test Embedding Search
+**Identification not working?**
 ```bash
-# In Terminal 1, watch for:
-[API] 🎨 Checking for similar albums using embeddings...
-[API] ✅ Found X visually similar albums
+# Check backend logs for errors
+# Verify Google Vision is configured
+# Verify Discogs token is set (if using Discogs)
+# Check network connectivity between phone and computer
 ```
 
-### Test GPT-4 Vision
-```bash
-# In Terminal 1, watch for:
-[API] 🧠 Vision candidates insufficient, trying GPT-4 Vision...
-[GPT-4 Vision] 🧠 Starting intelligent image analysis...
-[API] ✅ GPT-4 Vision identified: "Artist" - "Title"
-```
+## Expected Behavior
 
----
-
-## Success Criteria
-
-✅ **Backend starts** without errors  
-✅ **Frontend loads** in Expo Go  
-✅ **Camera works** and can capture photos  
-✅ **Identification succeeds** for clear album covers  
-✅ **Results display** correctly (artist, title, tracks)  
-✅ **Library saves** albums successfully  
-
----
-
-## Next Steps After Testing
-
-1. **Monitor costs** - Check OpenAI usage dashboard
-2. **Adjust confidence** - Tune `CONFIDENCE_THRESHOLD` if needed
-3. **Build embedding database** - More identifications = better matching
-4. **Test edge cases** - Try difficult covers, low light, etc.
+✅ **OCR-first**: Should extract artist/album from text on cover first
+✅ **Embeddings**: Should find similar covers even without text
+✅ **Scoring**: Should score all Discogs releases, not just first match
+✅ **Grouping**: Should group variant releases together
+✅ **Thresholds**: Auto-accept if score ≥ 0.8, show suggestions if ≥ 0.5
+✅ **Feedback**: Should log user confirmations for future learning
+✅ **Web noise**: Should filter out URLs, e-commerce text, article titles

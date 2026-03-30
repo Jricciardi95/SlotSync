@@ -11,7 +11,7 @@ export {
   // Records
   createRecord,
   getRecordById,
-  getAllRecords,
+  getRecords as getAllRecords, // Alias: getRecords → getAllRecords
   updateRecord,
   deleteRecord,
   findDuplicateRecord,
@@ -29,17 +29,18 @@ export {
   deleteImageHash,
   
   // Locations
-  createRecordLocation,
-  getRecordLocation,
-  updateRecordLocation,
-  deleteRecordLocation,
-  getAllRecordLocations,
+  setRecordLocation,
+  getRecordLocationByRecord,
+  getRecordLocationDetails,
+  // Note: createRecordLocation, getRecordLocation, updateRecordLocation, deleteRecordLocation, getAllRecordLocations
+  // are not exported - use setRecordLocation, getRecordLocationByRecord, getRecordLocationDetails, deleteRecord instead
   
   // Units, Rows, Sessions, etc.
   createUnit,
-  getUnits,
-  updateUnit,
-  deleteUnit,
+  getUnitsByRow, // Note: requires rowId parameter, no generic getUnits exists
+  // getUnits - not exported (use getUnitsByRow with rowId)
+  // updateUnit - not exported (doesn't exist in repository)
+  // deleteUnit - not exported (doesn't exist in repository)
   createRow,
   getRows,
   updateRow,
@@ -47,14 +48,14 @@ export {
   createSession,
   getSessions,
   updateSession,
-  deleteSession,
+  // deleteSession - not exported (doesn't exist in repository)
   
   // Batch Jobs
   createBatchJob,
   getBatchJob,
-  updateBatchJob,
+  updateBatchJobStatus as updateBatchJob, // Alias: updateBatchJobStatus → updateBatchJob
   deleteBatchJob,
-  createBatchPhoto,
+  // createBatchPhoto - not exported (photos are created automatically via createBatchJob)
   getBatchPhotos,
   updateBatchPhoto,
 } from '../../data/repository';
@@ -104,8 +105,8 @@ export async function saveResolvedAlbum(
 ): Promise<{ record: any; tracks: any[] }> {
   const { createRecord, createTrack, saveImageHash } = await import('../../data/repository');
   
-  // Create record
-  const record = await createRecord({
+  // PR3: Create or update record (UPSERT) - handles duplicates automatically
+  const { record, isNew } = await createRecord({
     title: album.albumTitle,
     artist: album.artist,
     year: album.releaseYear ?? null,
@@ -115,8 +116,14 @@ export async function saveResolvedAlbum(
     discogsId: album.discogsId ?? null,
     musicbrainzId: album.musicbrainzId ?? null,
   });
+  
+  // PR3: Only create tracks if this is a new record
+  if (!isNew) {
+    // Record already exists - return existing record with empty tracks
+    return { record, tracks: [] };
+  }
 
-  // Save tracks
+  // Save tracks (only for new records)
   const savedTracks = [];
   if (album.tracks && album.tracks.length > 0) {
     for (const track of album.tracks) {

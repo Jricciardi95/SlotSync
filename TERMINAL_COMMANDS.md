@@ -8,7 +8,7 @@
 cd /Users/jamesricciardi/SlotSync/backend-example
 
 # Set required environment variables
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export GOOGLE_APPLICATION_CREDENTIALS='/Users/jamesricciardi/SlotSync/backend-example/credentials.json'
 export CONFIDENCE_THRESHOLD='0.5'  # Optional: tune confidence (default: 0.5)
 

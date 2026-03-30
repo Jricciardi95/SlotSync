@@ -7,6 +7,7 @@ export * from './ModesScreen';
 export * from './SettingsScreen';
 export * from './RowDetailScreen';
 export * from './UnitLayoutScreen';
+export * from './VirtualShelfScreen';
 export * from './LoadModeStartScreen';
 export * from './LoadModeFlowScreen';
 export * from './CleanupModeHomeScreen';

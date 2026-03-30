@@ -11,7 +11,7 @@ lsof -ti:3000 | xargs kill -9 2>/dev/null
 # Start the backend with image identification
 cd /Users/jamesricciardi/SlotSync/backend-example
 export GOOGLE_APPLICATION_CREDENTIALS="./credentials.json"
-export DISCOGS_PERSONAL_ACCESS_TOKEN="gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK"
+export DISCOGS_PERSONAL_ACCESS_TOKEN="your_discogs_token_here"
 export ENABLE_GOOGLE_VISION=true
 node server-hybrid.js
 ```
@@ -153,7 +153,7 @@ npx expo start --clear
 cd /Users/jamesricciardi/SlotSync/backend-example && \
 lsof -ti:3000 | xargs kill -9 2>/dev/null; \
 export GOOGLE_APPLICATION_CREDENTIALS="./credentials.json" && \
-export DISCOGS_PERSONAL_ACCESS_TOKEN="gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK" && \
+export DISCOGS_PERSONAL_ACCESS_TOKEN="your_discogs_token_here" && \
 export ENABLE_GOOGLE_VISION=true && \
 node server-hybrid.js
 

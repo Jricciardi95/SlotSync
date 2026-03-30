@@ -7,6 +7,7 @@ import { RecordDetailScreen } from '../screens/RecordDetailScreen';
 import { ScanRecordScreen } from '../screens/ScanRecordScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
 import { CSVImportScreen } from '../screens/CSVImportScreen';
+import { VirtualShelfScreen } from '../screens/VirtualShelfScreen';
 import { LibraryStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<LibraryStackParamList>();
@@ -54,6 +55,11 @@ export const LibraryNavigator: React.FC = () => {
         name="CSVImport"
         component={CSVImportScreen}
         options={{ title: 'Import from CSV' }}
+      />
+      <Stack.Screen
+        name="VirtualShelf"
+        component={VirtualShelfScreen}
+        options={{ title: 'Virtual Shelf' }}
       />
     </Stack.Navigator>
   );

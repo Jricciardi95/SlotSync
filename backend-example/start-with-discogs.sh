@@ -9,7 +9,7 @@ echo ""
 export GOOGLE_APPLICATION_CREDENTIALS="./credentials.json"
 
 # Set Discogs Personal Access Token
-export DISCOGS_PERSONAL_ACCESS_TOKEN="gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK"
+export DISCOGS_PERSONAL_ACCESS_TOKEN="DmcfxeRAXtsFNqCQAYsLpJMDOgVSoLcPKUFarcWv"
 
 # Disable Google Vision for testing Discogs only (set to 'true' to re-enable)
 export ENABLE_GOOGLE_VISION=false

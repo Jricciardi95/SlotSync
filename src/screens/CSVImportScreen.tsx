@@ -14,11 +14,9 @@ import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
 import { AppButton } from '../components/AppButton';
 import { useTheme } from '../hooks/useTheme';
-import { createRecord } from '../data/repository';
 import { LibraryStackParamList } from '../navigation/types';
 import * as FileSystem from 'expo-file-system/legacy';
-import { getApiUrl, API_CONFIG } from '../config/api';
-import { createTrack } from '../data/repository';
+import { importCsvRowsWithEnrichment, CsvRow } from '../utils/csvImport';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'CSVImport'>;
 
@@ -112,7 +110,7 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
           autoMapping.artist = header;
         } else if (lower.includes('title') || lower.includes('album') || lower.includes('release title')) {
           autoMapping.title = header;
-        } else if (lower.includes('release id') || lower === 'release id') {
+        } else if (lower.includes('release id') || lower === 'release id' || lower === 'releaseid') {
           autoMapping.releaseId = header;
         } else if ((lower.includes('year') || lower.includes('date')) && 
                    !lower.includes('date added') && 
@@ -135,29 +133,43 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleImport = async () => {
+    console.log(`[CSV Import] ========================================`);
+    console.log(`[CSV Import] 🎬 handleImport() CALLED`);
+    console.log(`[CSV Import] 📋 Current mapping:`, mapping);
+    
     if (!mapping.artist || !mapping.title) {
+      console.error(`[CSV Import] ❌ Missing mapping: artist="${mapping.artist}", title="${mapping.title}"`);
       Alert.alert('Missing mapping', 'Artist and Title columns are required.');
       return;
     }
 
+    console.log(`[CSV Import] ✅ Mapping valid, starting import...`);
     setImporting(true);
     setImportedCount(0);
     setSkippedCount(0);
 
     try {
+      console.log(`[CSV Import] 📂 Opening document picker...`);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'text/csv',
         copyToCacheDirectory: true,
       });
 
+      console.log(`[CSV Import] 📂 Document picker result:`, { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
+
       if (result.canceled || !result.assets?.[0]) {
+        console.log(`[CSV Import] ⏭️  User canceled or no file selected`);
         setImporting(false);
         return;
       }
 
       const fileUri = result.assets[0].uri;
+      console.log(`[CSV Import] 📄 Reading file from: ${fileUri}`);
       const fileContent = await FileSystem.readAsStringAsync(fileUri);
+      console.log(`[CSV Import] 📄 File content length: ${fileContent.length} characters`);
+      
       const lines = parseCSV(fileContent);
+      console.log(`[CSV Import] 📊 Parsed ${lines.length} lines from CSV`);
 
       if (lines.length < 2) {
         Alert.alert('Error', 'CSV file has no data rows.');
@@ -168,6 +180,12 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
       const headers = lines[0];
       const dataRows = lines.slice(1);
 
+      console.log(`[CSV Import] ========================================`);
+      console.log(`[CSV Import] 🚀 STARTING CSV IMPORT`);
+      console.log(`[CSV Import] 📊 Total rows to process: ${dataRows.length}`);
+      console.log(`[CSV Import] 📋 Headers:`, headers);
+      console.log(`[CSV Import] ========================================`);
+
       const artistIdx = headers.indexOf(mapping.artist);
       const titleIdx = headers.indexOf(mapping.title);
       const yearIdx = mapping.year ? headers.indexOf(mapping.year) : -1;
@@ -175,167 +193,106 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
       const barcodeIdx = mapping.barcode ? headers.indexOf(mapping.barcode) : -1;
       const releaseIdIdx = mapping.releaseId ? headers.indexOf(mapping.releaseId) : -1;
 
-      let imported = 0;
-      let skipped = 0;
+      console.log(`[CSV Import] 📍 Column indices: artist=${artistIdx}, title=${titleIdx}, year=${yearIdx}, releaseId=${releaseIdIdx}`);
 
+      // Parse rows into CsvRow format
+      const csvRows: CsvRow[] = [];
       for (const row of dataRows) {
         if (row.length <= Math.max(artistIdx, titleIdx)) {
-          skipped += 1;
-          continue;
+          continue; // Skip invalid rows
         }
 
-        const artist = row[artistIdx]?.trim();
-        const title = row[titleIdx]?.trim();
+        const artist = row[artistIdx]?.trim() || '';
+        const title = row[titleIdx]?.trim() || '';
 
         if (!artist || !title) {
-          skipped += 1;
-          continue;
+          continue; // Skip rows without artist/title
         }
 
-        try {
-          let year = yearIdx >= 0 ? parseInt(row[yearIdx] || '0', 10) : null;
-          year = year && !isNaN(year) && year > 1900 && year < 2100 ? year : null;
-          
-          const notesParts: string[] = [];
-          if (notesIdx >= 0 && row[notesIdx]) {
-            notesParts.push(row[notesIdx].trim());
+        // Parse year from CSV - be strict about validation
+        let year: number | null = null;
+        if (yearIdx >= 0 && row[yearIdx]) {
+          const yearStr = row[yearIdx].trim();
+          const parsedYear = parseInt(yearStr, 10);
+          const currentYear = new Date().getFullYear();
+          if (!isNaN(parsedYear) && parsedYear >= 1900 && parsedYear <= currentYear + 1 && parsedYear !== 2025) {
+            year = parsedYear;
           }
-          if (barcodeIdx >= 0 && row[barcodeIdx]) {
-            notesParts.push(`Barcode: ${row[barcodeIdx].trim()}`);
+        }
+
+        // Parse notes
+        const notesParts: string[] = [];
+        if (notesIdx >= 0 && row[notesIdx]) {
+          notesParts.push(row[notesIdx].trim());
+        }
+        if (barcodeIdx >= 0 && row[barcodeIdx]) {
+          notesParts.push(`Barcode: ${row[barcodeIdx].trim()}`);
+        }
+        const notes = notesParts.length > 0 ? notesParts.join(' | ') : null;
+
+        // Parse release ID
+        let releaseId: number | null = null;
+        if (releaseIdIdx >= 0 && row[releaseIdIdx]) {
+          const releaseIdStr = row[releaseIdIdx]?.trim();
+          const parsedReleaseId = parseInt(releaseIdStr, 10);
+          if (parsedReleaseId && !isNaN(parsedReleaseId) && parsedReleaseId > 0) {
+            releaseId = parsedReleaseId;
           }
+        }
 
-          let coverImageRemoteUrl: string | null = null;
-          let tracks: Array<{ title: string; trackNumber?: number | null }> = [];
-          let discogsReleaseId: number | null = null;
+        csvRows.push({
+          artist,
+          title,
+          year,
+          notes,
+          releaseId,
+        });
+      }
 
-          // If Release ID exists, fetch full metadata from Discogs
-          if (releaseIdIdx >= 0 && row[releaseIdIdx]) {
-            const releaseIdStr = row[releaseIdIdx]?.trim();
-            const releaseId = parseInt(releaseIdStr, 10);
-            
-            if (releaseId && !isNaN(releaseId)) {
-              discogsReleaseId = releaseId;
-              try {
-                console.log(`[CSV Import] Fetching Discogs release ${releaseId}...`);
-                const apiUrl = getApiUrl('/api/discogs/release/' + releaseId);
-                const response = await fetch(apiUrl, {
-                  method: 'GET',
-                  headers: { 'Content-Type': 'application/json' },
-                });
+      // Import rows with concurrency and retry
+      const importResult = await importCsvRowsWithEnrichment(csvRows, {
+        concurrency: 4,
+        maxRetries: 2,
+        onProgress: (current, total) => {
+          setImportedCount(current);
+          setSkippedCount(total - current);
+        },
+      });
 
-                if (response.ok) {
-                  const discogsData = await response.json();
-                  coverImageRemoteUrl = discogsData.coverImageRemoteUrl || null;
-                  tracks = discogsData.tracks || [];
-                  // Use Discogs year if we don't have one or if it's more reliable
-                  if (!year || (discogsData.year && discogsData.year > 1900 && discogsData.year < 2100)) {
-                    year = discogsData.year || year;
-                  }
-                  console.log(`[CSV Import] ✅ Fetched metadata for ${artist} - ${title}: ${tracks.length} tracks`);
-                } else {
-                  console.warn(`[CSV Import] ⚠️  Could not fetch Discogs release ${releaseId}: ${response.status}`);
-                }
-              } catch (fetchError) {
-                console.warn(`[CSV Import] ⚠️  Error fetching Discogs release ${releaseId}:`, fetchError);
-                // Continue with basic data
-              }
-            }
-          } else {
-            // No Release ID - try text-based lookup to enrich metadata
-            try {
-              console.log(`[CSV Import] Enriching metadata for "${artist}" - "${title}" via text lookup...`);
-              const apiUrl = getApiUrl('/api/identify-by-text');
-              const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ artist, title }),
-              });
+      const imported = importResult.imported;
+      const skipped = importResult.skipped;
 
-              if (response.ok) {
-                const lookupData = await response.json();
-                if (lookupData.success && lookupData.primaryMatch) {
-                  const match = lookupData.primaryMatch;
-                  // Use enriched data if available
-                  // CRITICAL: Always use HQ cover art from API, never user photo
-                  if (match.coverImageRemoteUrl && !coverImageRemoteUrl) {
-                    coverImageRemoteUrl = match.coverImageRemoteUrl;
-                  }
-                  if (match.tracks && match.tracks.length > 0 && tracks.length === 0) {
-                    tracks = match.tracks.map((t: any) => ({
-                      title: t.title,
-                      trackNumber: t.trackNumber || null,
-                    }));
-                  }
-                  if (match.year && !year) {
-                    year = match.year;
-                  }
-                  if (match.discogsId) {
-                    discogsReleaseId = parseInt(match.discogsId, 10);
-                  }
-                  console.log(`[CSV Import] ✅ Enriched metadata: ${tracks.length} tracks, cover: ${!!coverImageRemoteUrl}`);
-                }
-              } else {
-                console.warn(`[CSV Import] ⚠️  Text lookup failed: ${response.status}`);
-              }
-            } catch (lookupError) {
-              console.warn(`[CSV Import] ⚠️  Error during text lookup:`, lookupError);
-              // Continue with basic data
-            }
-          }
-
-          // Add Discogs Release ID to notes if available
-          if (discogsReleaseId) {
-            notesParts.push(`Discogs Release ID: ${discogsReleaseId}`);
-          }
-
-          // CRITICAL: Use unified image selection logic
-          // If metadata lookup returned a coverImageRemoteUrl, use it and ignore any CSV image paths
-          const { prepareImageFields } = require('../utils/imageSelection');
-          const imageFields = prepareImageFields(coverImageRemoteUrl, null); // CSV doesn't have local images
-          
-          const record = await createRecord({
-            title,
-            artist,
-            year,
-            notes: notesParts.length > 0 ? notesParts.join(' | ') : null,
-            coverImageRemoteUrl: imageFields.coverImageRemoteUrl,
-            coverImageLocalUri: imageFields.coverImageLocalUri,
-          });
-
-          // Add tracks if we have them
-          if (tracks.length > 0 && record.id) {
-            for (const track of tracks) {
-              try {
-                await createTrack({
-                  recordId: record.id,
-                  title: track.title,
-                  trackNumber: track.trackNumber || null,
-                });
-              } catch (trackError) {
-                console.warn(`[CSV Import] Failed to create track:`, trackError);
-              }
-            }
-          }
-
-          imported += 1;
-        } catch (error) {
-          console.error('Failed to import record', error);
-          skipped += 1;
+      // Log failures for debugging
+      if (importResult.failures.length > 0) {
+        console.warn(`[CSV Import] ⚠️  ${importResult.failures.length} rows failed:`);
+        for (const failure of importResult.failures) {
+          console.warn(`[CSV Import]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
         }
       }
+
 
       setImportedCount(imported);
       setSkippedCount(skipped);
 
+      console.log(`[CSV Import] ========================================`);
+      console.log(`[CSV Import] ✅ IMPORT COMPLETE: ${imported} imported, ${skipped} skipped`);
+      console.log(`[CSV Import] ========================================`);
+      
       Alert.alert(
         'Import Complete',
         `Imported ${imported} records successfully. ${skipped} rows were skipped.`,
         [{ text: 'OK', onPress: () => navigation.navigate('LibraryHome') }]
       );
-    } catch (error) {
-      console.error('Import failed', error);
-      Alert.alert('Error', 'Could not import CSV file.');
+    } catch (error: any) {
+      console.error(`[CSV Import] ========================================`);
+      console.error(`[CSV Import] ❌ IMPORT FAILED:`, error);
+      console.error(`[CSV Import] ❌ Error type: ${error?.name}`);
+      console.error(`[CSV Import] ❌ Error message: ${error?.message}`);
+      console.error(`[CSV Import] ❌ Error stack:`, error?.stack?.substring(0, 500));
+      console.error(`[CSV Import] ========================================`);
+      Alert.alert('Error', `Could not import CSV file: ${error?.message || 'Unknown error'}`);
     } finally {
+      console.log(`[CSV Import] 🏁 Setting importing=false`);
       setImporting(false);
     }
   };

@@ -34,6 +34,8 @@ import {
   deleteTrack,
   updateTrack,
   deleteRecord,
+  getSlotAssignmentDetails,
+  getSlotAssignmentByRecord,
 } from '../data/repository';
 import { identifyRecord } from '../services/RecordIdentificationService';
 import {
@@ -101,6 +103,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const [record, setRecord] = useState<RecordModel | null>(null);
   const [location, setLocation] = useState<RecordLocationDetails | null>(null);
+  const [slotAssignment, setSlotAssignment] = useState<Awaited<ReturnType<typeof getSlotAssignmentDetails>> | null>(null); // PR7: Slot assignment
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   // Track whether we've successfully loaded this record at least once
@@ -136,10 +139,11 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setLoading(false);
     }
     try {
-      const [recordData, locationData, tracksData] = await Promise.all([
+      const [recordData, locationData, tracksData, slotAssignmentData] = await Promise.all([
         getRecordById(recordId),
         getRecordLocationDetails(recordId),
         getTracksByRecord(recordId),
+        getSlotAssignmentDetails(recordId), // PR7: Load slot assignment
       ]);
       console.log('[RecordDetail] Loaded record:', {
         id: recordData?.id,
@@ -164,6 +168,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         console.warn('[RecordDetail] API returned null record, preserving existing record data');
       }
       setLocation(locationData);
+      setSlotAssignment(slotAssignmentData); // PR7: Set slot assignment
       setTracks(tracksData);
     } catch (error) {
       console.error('[RecordDetail] Error loading record:', error);
@@ -221,6 +226,95 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setSelectedRow(null);
     setSelectedUnit(null);
     setSlotGroups([]);
+  };
+
+  const handleLookupMetadata = async () => {
+    if (!record || !record.artist || !record.title) {
+      Alert.alert('Missing info', 'Artist and title are required to lookup metadata.');
+      return;
+    }
+
+    setFetchingTracks(true);
+    try {
+      console.log(`[RecordDetail] Looking up metadata for "${record.artist}" - "${record.title}"`);
+      
+      // Use text-based lookup (works without cover image)
+      const { identifyRecordByText } = await import('../services/RecordIdentificationService');
+      const response = await identifyRecordByText(record.artist, record.title);
+      
+      if (response.bestMatch) {
+        const match = response.bestMatch;
+        const updates: any = {};
+        
+        // Update cover art if we don't have one or if we got a better one
+        if (match.coverImageRemoteUrl && (!record.coverImageRemoteUrl || !record.coverImageLocalUri)) {
+          updates.coverImageRemoteUrl = match.coverImageRemoteUrl;
+        }
+        
+        // Update year if we don't have one
+        if (match.year && !record.year) {
+          updates.year = match.year;
+        }
+        
+        // Update discogsId if we don't have one
+        if (match.discogsId && !record.discogsId) {
+          updates.discogsId = String(match.discogsId);
+        }
+        
+        // Save updates if any
+        if (Object.keys(updates).length > 0) {
+          const { updateRecord } = await import('../data/repository');
+          await updateRecord(recordId, updates);
+          console.log(`[RecordDetail] ✅ Updated record metadata:`, updates);
+        }
+        
+        // Add tracks if we have them and don't already have tracks
+        if (match.tracks && Array.isArray(match.tracks) && match.tracks.length > 0 && tracks.length === 0) {
+          const { createTrack } = await import('../data/repository');
+          let savedCount = 0;
+          for (const track of match.tracks) {
+            try {
+              if (track.title && track.title.trim()) {
+                await createTrack({
+                  recordId: recordId,
+                  title: track.title.trim(),
+                  trackNumber: track.trackNumber || null,
+                  discNumber: track.discNumber || null,
+                  side: track.side || null,
+                  durationSeconds: track.durationSeconds || null,
+                });
+                savedCount++;
+              }
+            } catch (error) {
+              console.warn(`[RecordDetail] Failed to save track:`, error);
+            }
+          }
+          
+          // Reload tracks
+          const updatedTracks = await getTracksByRecord(recordId);
+          setTracks(updatedTracks);
+          
+          Alert.alert(
+            'Success', 
+            `Metadata updated! ${savedCount > 0 ? `Added ${savedCount} track${savedCount > 1 ? 's' : ''}. ` : ''}${updates.coverImageRemoteUrl ? 'Cover art added. ' : ''}${updates.year ? 'Year updated. ' : ''}`
+          );
+        } else if (Object.keys(updates).length > 0) {
+          Alert.alert('Success', `Metadata updated! ${updates.coverImageRemoteUrl ? 'Cover art added. ' : ''}${updates.year ? 'Year updated. ' : ''}`);
+        } else {
+          Alert.alert('Info', 'No additional metadata found for this album.');
+        }
+        
+        // Reload record to show updates
+        await load(false);
+      } else {
+        Alert.alert('Not Found', `Could not find metadata for "${record.title}" by "${record.artist}".`);
+      }
+    } catch (error: any) {
+      console.error('[RecordDetail] Failed to lookup metadata:', error);
+      Alert.alert('Error', 'Failed to lookup metadata. Please try again.');
+    } finally {
+      setFetchingTracks(false);
+    }
   };
 
   const handleFetchTracks = async () => {
@@ -703,6 +797,50 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <AppText variant="body">Not placed yet</AppText>
             )}
             <AppButton title="Assign / Change Location" onPress={openAssign} />
+            {/* PR7: Slot Assignment Section */}
+            {slotAssignment ? (
+              <>
+                <AppText variant="body" style={{ marginTop: spacing.sm, fontWeight: '600' }}>
+                  Slot Assignment
+                </AppText>
+                <AppText variant="body">
+                  Unit: {slotAssignment.unit.name}
+                </AppText>
+                <AppText variant="body">
+                  Slot: {slotAssignment.slot.slotNumber}
+                </AppText>
+                <AppButton
+                  title="View Virtual Shelf"
+                  variant="secondary"
+                  onPress={() => {
+                    navigation.navigate('VirtualShelf', {
+                      unitId: slotAssignment.unit.id,
+                      recordId: recordId,
+                    });
+                  }}
+                />
+              </>
+            ) : location ? (
+              <>
+                <AppText variant="caption" style={{ color: colors.textMuted, marginTop: spacing.sm }}>
+                  No slot assignment yet. Use Virtual Shelf to assign a specific slot.
+                </AppText>
+                <AppButton
+                  title="Open Virtual Shelf"
+                  variant="secondary"
+                  onPress={() => {
+                    if (location.unitId) {
+                      navigation.navigate('VirtualShelf', {
+                        unitId: location.unitId,
+                        recordId: recordId,
+                      });
+                    } else {
+                      Alert.alert('Error', 'Unit ID not available');
+                    }
+                  }}
+                />
+              </>
+            ) : null}
             <AppButton
               title="Light Slot"
               variant="secondary"
@@ -726,15 +864,28 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <AppCard style={{ gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
               <AppText variant="subtitle">Tracks</AppText>
-              {tracks.length === 0 && record.coverImageLocalUri && (
-                <AppButton
-                  title={fetchingTracks ? "Fetching..." : "Fetch Tracks"}
-                  variant="secondary"
-                  onPress={handleFetchTracks}
-                  disabled={fetchingTracks}
-                  style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs }}
-                />
-              )}
+              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                {/* Lookup Metadata button - works for CSV imports without cover art */}
+                {(!record.coverImageRemoteUrl || tracks.length === 0) && record.artist && record.title && (
+                  <AppButton
+                    title={fetchingTracks ? "Looking up..." : "Lookup Metadata"}
+                    variant="secondary"
+                    onPress={handleLookupMetadata}
+                    disabled={fetchingTracks}
+                    style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs }}
+                  />
+                )}
+                {/* Fetch Tracks button - only if we have cover image */}
+                {tracks.length === 0 && record.coverImageLocalUri && (
+                  <AppButton
+                    title={fetchingTracks ? "Fetching..." : "Fetch Tracks"}
+                    variant="secondary"
+                    onPress={handleFetchTracks}
+                    disabled={fetchingTracks}
+                    style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs }}
+                  />
+                )}
+              </View>
             </View>
             {fetchingTracks ? (
               <View style={{ padding: spacing.md, alignItems: 'center' }}>
@@ -758,15 +909,25 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                       borderRadius: radius.sm,
                     }}
                   >
-                    <AppText variant="body">
-                      {track.trackNumber ? `${track.trackNumber}. ` : `${idx + 1}. `}
-                      {track.title}
-                    </AppText>
-                    {track.durationSeconds && (
-                      <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: spacing.xs }}>
-                        {Math.floor(track.durationSeconds / 60)}:{(track.durationSeconds % 60).toString().padStart(2, '0')}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                      <AppText variant="body" style={{ flex: 1 }}>
+                        {track.trackNumber ? `${track.trackNumber}. ` : `${idx + 1}. `}
+                        {track.title}
                       </AppText>
-                    )}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        {track.bpm && (
+                          <AppText variant="caption" style={{ color: colors.accent, fontWeight: '600' }}>
+                            {Math.round(track.bpm)} BPM
+                          </AppText>
+                        )}
+                        <AppText variant="caption" style={{ color: colors.textSecondary }}>
+                          {track.durationSeconds 
+                            ? `${Math.floor(track.durationSeconds / 60)}:${(track.durationSeconds % 60).toString().padStart(2, '0')}`
+                            : '--'
+                          }
+                        </AppText>
+                      </View>
+                    </View>
                   </View>
                 ))}
               </View>

@@ -10,7 +10,7 @@ Open **Terminal 1** and run:
 cd /Users/jamesricciardi/SlotSync/backend-example
 
 # Set required environment variables
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export OPENAI_API_KEY='sk-your-key-here'  # Replace with your actual key
 export ENABLE_GPT4_VISION='true'

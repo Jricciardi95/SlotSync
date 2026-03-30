@@ -6,7 +6,7 @@ Open **Terminal 1** and run:
 
 ```bash
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export OPENAI_API_KEY='sk-your-key-here'
 export ENABLE_GPT4_VISION='true'
@@ -136,7 +136,7 @@ Should output: `Enabled: true`
 ```bash
 # Start server
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export OPENAI_API_KEY='sk-...'
 export ENABLE_GPT4_VISION='true'

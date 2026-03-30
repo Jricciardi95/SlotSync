@@ -160,7 +160,8 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
       
       const imageFields = prepareImageFields(remoteUrl, localUri);
       
-      const newRecord = await createRecord({
+      // PR3: createRecord now returns { record, isNew } and handles duplicates
+      const { record: newRecord, isNew } = await createRecord({
         title: title.trim(),
         artist: artist.trim(),
         artistLastName: artistLastName.trim() || null,
@@ -170,7 +171,28 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
         coverImageLocalUri: imageFields.coverImageLocalUri,
       });
       
-      // Create tracks if we have them
+      // PR3: Show conflict UI if record already exists
+      if (!isNew) {
+        Alert.alert(
+          'Record Already Exists',
+          `"${newRecord.artist} - ${newRecord.title}" is already in your library.`,
+          [
+            {
+              text: 'Open Existing',
+              onPress: () => {
+                navigation.navigate('RecordDetail', { recordId: newRecord.id });
+              },
+            },
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+          ]
+        );
+        return; // Exit early - don't create tracks for existing record
+      }
+      
+      // Create tracks if we have them (only for new records)
       if (tracks.length > 0 && newRecord.id) {
         for (const track of tracks) {
           try {

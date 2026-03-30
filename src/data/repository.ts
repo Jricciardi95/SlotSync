@@ -16,8 +16,12 @@ import {
   Playlist,
   PlaylistItem,
   PlaylistRecord,
+  Slot,
+  RecordSlotAssignment,
+  SlotWithAssignment,
 } from './types';
 import { generateId } from '../utils/id';
+import { normalizeText } from '../utils/normalizeText';
 
 const now = () => new Date().toISOString();
 
@@ -131,6 +135,26 @@ const initializeSlotGroupsForUnit = async (
   });
 };
 
+// PR7: Initialize slots for a unit (one row per slot)
+const initializeSlotsForUnit = async (
+  db: SQLiteDatabase,
+  unitId: string,
+  totalSlots: number
+) => {
+  await db.withTransactionAsync(async () => {
+    for (let slotNumber = 1; slotNumber <= totalSlots; slotNumber += 1) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO slots (id, unitId, slotNumber, createdAt)
+         VALUES (?, ?, ?, ?)`,
+        generateId('slot'),
+        unitId,
+        slotNumber,
+        now()
+      );
+    }
+  });
+};
+
 export const createUnit = async ({
   name,
   rowId = null,
@@ -160,6 +184,8 @@ export const createUnit = async ({
   );
 
   await initializeSlotGroupsForUnit(db, id, totalSlots);
+  // PR7: Also initialize slots table
+  await initializeSlotsForUnit(db, id, totalSlots);
 
   return {
     id,
@@ -277,23 +303,160 @@ export const splitShelfSlotGroup = async (
 };
 
 /* Records */
-type CreateRecordInput = Omit<RecordModel, 'id' | 'createdAt' | 'updatedAt'> & {
+type CreateRecordInput = Omit<RecordModel, 'id' | 'createdAt' | 'updatedAt' | 'normalizedTitle' | 'normalizedArtist'> & {
   id?: string;
 };
 
+/**
+ * PR3: Find existing record by identity (discogsId or normalized artist+title+year)
+ * 
+ * @param discogsId - Discogs release ID (primary identity)
+ * @param artist - Artist name
+ * @param title - Album title
+ * @param year - Optional year
+ * @returns Existing record or null
+ */
+export const findRecordByIdentity = async (
+  discogsId: string | null | undefined,
+  artist: string,
+  title: string,
+  year?: number | null
+): Promise<RecordModel | null> => {
+  const db = await getDatabase();
+  
+  // Primary: Check by discogsId if present
+  if (discogsId) {
+    const byDiscogsId = await db.getFirstAsync<RecordModel>(
+      `SELECT * FROM records WHERE discogsId = ? LIMIT 1`,
+      discogsId
+    );
+    if (byDiscogsId) return byDiscogsId;
+  }
+  
+  // Fallback: Check by normalized artist+title+year
+  const normalizedArtist = normalizeText(artist);
+  const normalizedTitle = normalizeText(title);
+  
+  if (year) {
+    const byIdentity = await db.getFirstAsync<RecordModel>(
+      `SELECT * FROM records 
+       WHERE normalizedArtist = ? AND normalizedTitle = ? AND year = ?
+       LIMIT 1`,
+      normalizedArtist,
+      normalizedTitle,
+      year
+    );
+    if (byIdentity) return byIdentity;
+  } else {
+    // Year is NULL - check for records with NULL year
+    const byIdentity = await db.getFirstAsync<RecordModel>(
+      `SELECT * FROM records 
+       WHERE normalizedArtist = ? AND normalizedTitle = ? AND year IS NULL
+       LIMIT 1`,
+      normalizedArtist,
+      normalizedTitle
+    );
+    if (byIdentity) return byIdentity;
+  }
+  
+  return null;
+};
+
+/**
+ * PR3: Create or update record (UPSERT)
+ * 
+ * If a record with the same identity exists:
+ * - Updates missing fields (cover, tracks, metadata)
+ * - Returns existing record with isNew: false
+ * 
+ * Otherwise creates a new record with isNew: true.
+ * 
+ * @param input - Record data
+ * @returns Created or updated record with isNew flag
+ */
 export const createRecord = async (
   input: CreateRecordInput
-): Promise<RecordModel> => {
+): Promise<{ record: RecordModel; isNew: boolean }> => {
   const db = await getDatabase();
-  const id = input.id ?? generateId('record');
   const timestamp = now();
-
+  
+  // PR3: Normalize fields for identity matching
+  const normalizedArtist = normalizeText(input.artist);
+  const normalizedTitle = normalizeText(input.title);
+  
+  // PR3: Check for existing record by identity
+  const existing = await findRecordByIdentity(
+    input.discogsId ?? null,
+    input.artist,
+    input.title,
+    input.year ?? null
+  );
+  
+  if (existing) {
+    // PR3: Update existing record with missing fields
+    const updates: string[] = [];
+    const values: any[] = [];
+    
+    // Only update if new value is provided and existing is missing
+    if (input.discogsId && !existing.discogsId) {
+      updates.push('discogsId = ?');
+      values.push(input.discogsId);
+    }
+    if (input.coverImageRemoteUrl && !existing.coverImageRemoteUrl) {
+      updates.push('coverImageRemoteUrl = ?');
+      values.push(input.coverImageRemoteUrl);
+    }
+    if (input.coverImageLocalUri && !existing.coverImageLocalUri) {
+      updates.push('coverImageLocalUri = ?');
+      values.push(input.coverImageLocalUri);
+    }
+    if (input.musicbrainzId && !existing.musicbrainzId) {
+      updates.push('musicbrainzId = ?');
+      values.push(input.musicbrainzId);
+    }
+    if (input.genre && !existing.genre) {
+      updates.push('genre = ?');
+      values.push(input.genre);
+    }
+    
+    // Always update normalized fields and updatedAt
+    updates.push('normalizedArtist = ?', 'normalizedTitle = ?', 'updatedAt = ?');
+    values.push(normalizedArtist, normalizedTitle, timestamp);
+    values.push(existing.id);
+    
+    if (updates.length > 3) { // More than just normalized fields + updatedAt
+      await db.runAsync(
+        `UPDATE records SET ${updates.join(', ')} WHERE id = ?`,
+        ...values
+      );
+    } else {
+      // Only update normalized fields
+      await db.runAsync(
+        `UPDATE records SET normalizedArtist = ?, normalizedTitle = ?, updatedAt = ? WHERE id = ?`,
+        normalizedArtist,
+        normalizedTitle,
+        timestamp,
+        existing.id
+      );
+    }
+    
+    // Return updated record
+    const updated = await getRecordById(existing.id);
+    if (!updated) throw new Error('Record not found after update');
+    
+    return { record: updated, isNew: false };
+  }
+  
+  // PR3: Create new record with normalized fields
+  const id = input.id ?? generateId('record');
+  
   await db.runAsync(
     `INSERT INTO records (
       id, title, artist, artistLastName, year, genre, notes,
       coverImageLocalUri, coverImageRemoteUrl, discogsId, musicbrainzId,
+      normalizedTitle, normalizedArtist,
       createdAt, updatedAt
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.title,
     input.artist,
@@ -305,11 +468,13 @@ export const createRecord = async (
     input.coverImageRemoteUrl ?? null,
     input.discogsId ?? null,
     input.musicbrainzId ?? null,
+    normalizedTitle,
+    normalizedArtist,
     timestamp,
     timestamp
   );
 
-  return {
+  const newRecord: RecordModel = {
     id,
     title: input.title,
     artist: input.artist,
@@ -321,9 +486,13 @@ export const createRecord = async (
     coverImageRemoteUrl: input.coverImageRemoteUrl ?? null,
     discogsId: input.discogsId ?? null,
     musicbrainzId: input.musicbrainzId ?? null,
+    normalizedTitle,
+    normalizedArtist,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+  
+  return { record: newRecord, isNew: true };
 };
 
 type UpdateRecordInput = Partial<Omit<RecordModel, 'id' | 'createdAt' | 'updatedAt'>>;
@@ -401,11 +570,39 @@ export const updateRecord = async (
   return updated;
 };
 
-export const getRecords = async (): Promise<RecordModel[]> => {
+/**
+ * PR5: Optimized getRecords - can select only needed fields for list views
+ * 
+ * @param fields - Optional array of field names to select (default: all fields)
+ * @param limit - Optional limit for pagination
+ * @param offset - Optional offset for pagination
+ */
+export const getRecords = async (
+  fields?: string[],
+  limit?: number,
+  offset?: number
+): Promise<RecordModel[]> => {
   const db = await getDatabase();
-  return db.getAllAsync<RecordModel>(
-    `SELECT * FROM records ORDER BY updatedAt DESC`
-  );
+  
+  // PR5: Select only requested fields (or all if not specified)
+  const fieldList = fields && fields.length > 0 
+    ? fields.join(', ')
+    : '*';
+  
+  let query = `SELECT ${fieldList} FROM records ORDER BY updatedAt DESC`;
+  const params: any[] = [];
+  
+  // PR5: Add pagination if specified
+  if (limit !== undefined) {
+    query += ' LIMIT ?';
+    params.push(limit);
+    if (offset !== undefined) {
+      query += ' OFFSET ?';
+      params.push(offset);
+    }
+  }
+  
+  return db.getAllAsync<RecordModel>(query, ...params);
 };
 
 /* Record locations */
@@ -768,6 +965,7 @@ type CreateTrackInput = {
   discNumber?: number | null;
   side?: string | null;
   durationSeconds?: number | null;
+  bpm?: number | null; // Beats Per Minute - from Spotify/Apple Music API
 };
 
 export const createTrack = async (input: CreateTrackInput): Promise<Track> => {
@@ -775,15 +973,16 @@ export const createTrack = async (input: CreateTrackInput): Promise<Track> => {
   const id = generateId('track');
 
   await db.runAsync(
-    `INSERT INTO tracks (id, recordId, title, trackNumber, discNumber, side, durationSeconds)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tracks (id, recordId, title, trackNumber, discNumber, side, durationSeconds, bpm)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.recordId,
     input.title,
     input.trackNumber ?? null,
     input.discNumber ?? null,
     input.side ?? null,
-    input.durationSeconds ?? null
+    input.durationSeconds ?? null,
+    input.bpm ?? null
   );
 
   return {
@@ -794,7 +993,208 @@ export const createTrack = async (input: CreateTrackInput): Promise<Track> => {
     discNumber: input.discNumber ?? null,
     side: input.side ?? null,
     durationSeconds: input.durationSeconds ?? null,
+    bpm: input.bpm ?? null,
   };
+};
+
+/**
+ * Create multiple tracks in a single batch operation (more efficient than individual inserts)
+ * Uses a single SQL INSERT statement with multiple VALUES clauses for maximum performance
+ * PR5: Now uses transaction for better performance
+ */
+export const createTracksBatch = async (inputs: CreateTrackInput[]): Promise<Track[]> => {
+  if (inputs.length === 0) return [];
+
+  const db = await getDatabase();
+  const tracks: Track[] = [];
+
+  // PR5: Wrap in transaction for better performance
+  await db.withTransactionAsync(async () => {
+    // Generate all IDs upfront
+    const trackData = inputs.map((input) => ({
+      id: generateId('track'),
+      input,
+    }));
+
+    // Build single INSERT statement with multiple VALUES
+    const valuesPlaceholders = trackData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const values = trackData.flatMap(({ id, input }) => [
+      id,
+      input.recordId,
+      input.title,
+      input.trackNumber ?? null,
+      input.discNumber ?? null,
+      input.side ?? null,
+      input.durationSeconds ?? null,
+      input.bpm ?? null,
+    ]);
+
+    // Execute single batch INSERT
+    await db.runAsync(
+      `INSERT INTO tracks (id, recordId, title, trackNumber, discNumber, side, durationSeconds, bpm)
+       VALUES ${valuesPlaceholders}`,
+      ...values
+    );
+
+    // Build return array
+    for (const { id, input } of trackData) {
+      tracks.push({
+        id,
+        recordId: input.recordId,
+        title: input.title,
+        trackNumber: input.trackNumber ?? null,
+        discNumber: input.discNumber ?? null,
+        side: input.side ?? null,
+        durationSeconds: input.durationSeconds ?? null,
+        bpm: input.bpm ?? null,
+      });
+    }
+  });
+
+  return tracks;
+};
+
+/**
+ * PR5: Batch create records with tracks in a single transaction
+ * 
+ * This is optimized for CSV imports where we want to insert many records
+ * and their tracks together in batches.
+ * 
+ * @param inputs - Array of record inputs with optional tracks
+ * @returns Array of created records with isNew flags
+ */
+type BatchRecordInput = CreateRecordInput & {
+  tracks?: Array<Omit<CreateTrackInput, 'recordId'>>; // recordId will be set automatically
+};
+
+export const createRecordsBatch = async (
+  inputs: BatchRecordInput[]
+): Promise<Array<{ record: RecordModel; isNew: boolean }>> => {
+  if (inputs.length === 0) return [];
+
+  const db = await getDatabase();
+  const timestamp = now();
+  const results: Array<{ record: RecordModel; isNew: boolean }> = [];
+  
+  // PR5: Process in a single transaction for maximum performance
+  await db.withTransactionAsync(async () => {
+    for (const input of inputs) {
+      // Normalize fields
+      const normalizedArtist = normalizeText(input.artist);
+      const normalizedTitle = normalizeText(input.title);
+      
+      // Check for existing record
+      const existing = await findRecordByIdentity(
+        input.discogsId ?? null,
+        input.artist,
+        input.title,
+        input.year ?? null
+      );
+      
+      if (existing) {
+        // Update existing record (minimal updates)
+        const updates: string[] = [];
+        const values: any[] = [];
+        
+        if (input.discogsId && !existing.discogsId) {
+          updates.push('discogsId = ?');
+          values.push(input.discogsId);
+        }
+        if (input.coverImageRemoteUrl && !existing.coverImageRemoteUrl) {
+          updates.push('coverImageRemoteUrl = ?');
+          values.push(input.coverImageRemoteUrl);
+        }
+        
+        updates.push('normalizedArtist = ?', 'normalizedTitle = ?', 'updatedAt = ?');
+        values.push(normalizedArtist, normalizedTitle, timestamp, existing.id);
+        
+        await db.runAsync(
+          `UPDATE records SET ${updates.join(', ')} WHERE id = ?`,
+          ...values
+        );
+        
+        const updated = await getRecordById(existing.id);
+        if (updated) {
+          results.push({ record: updated, isNew: false });
+        }
+      } else {
+        // Create new record
+        const id = input.id ?? generateId('record');
+        
+        await db.runAsync(
+          `INSERT INTO records (
+            id, title, artist, artistLastName, year, genre, notes,
+            coverImageLocalUri, coverImageRemoteUrl, discogsId, musicbrainzId,
+            normalizedTitle, normalizedArtist,
+            createdAt, updatedAt
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id,
+          input.title,
+          input.artist,
+          input.artistLastName ?? null,
+          input.year ?? null,
+          input.genre ?? null,
+          input.notes ?? null,
+          input.coverImageLocalUri ?? null,
+          input.coverImageRemoteUrl ?? null,
+          input.discogsId ?? null,
+          input.musicbrainzId ?? null,
+          normalizedTitle,
+          normalizedArtist,
+          timestamp,
+          timestamp
+        );
+        
+        const newRecord: RecordModel = {
+          id,
+          title: input.title,
+          artist: input.artist,
+          artistLastName: input.artistLastName ?? null,
+          year: input.year ?? null,
+          genre: input.genre ?? null,
+          notes: input.notes ?? null,
+          coverImageLocalUri: input.coverImageLocalUri ?? null,
+          coverImageRemoteUrl: input.coverImageRemoteUrl ?? null,
+          discogsId: input.discogsId ?? null,
+          musicbrainzId: input.musicbrainzId ?? null,
+          normalizedTitle,
+          normalizedArtist,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        
+        results.push({ record: newRecord, isNew: true });
+        
+        // PR5: Insert tracks in the same transaction if provided
+        if (input.tracks && input.tracks.length > 0) {
+          const trackData = input.tracks.map((track) => ({
+            id: generateId('track'),
+            track,
+          }));
+          
+          const valuesPlaceholders = trackData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+          const trackValues = trackData.flatMap(({ id, track }) => [
+            id,
+            newRecord.id, // Use the record id we just created
+            track.title,
+            track.trackNumber ?? null,
+            track.discNumber ?? null,
+            track.side ?? null,
+            track.durationSeconds ?? null,
+            track.bpm ?? null,
+          ]);
+          
+          await db.runAsync(
+            `INSERT INTO tracks (id, recordId, title, trackNumber, discNumber, side, durationSeconds, bpm)
+             VALUES ${valuesPlaceholders}`,
+            ...trackValues
+          );
+        }
+      }
+    }
+  });
+  
+  return results;
 };
 
 export const getTracksByRecord = async (recordId: string): Promise<Track[]> => {
@@ -888,6 +1288,10 @@ export const updateTrack = async (
   if (updates.durationSeconds !== undefined) {
     fields.push('durationSeconds = ?');
     values.push(updates.durationSeconds);
+  }
+  if (updates.bpm !== undefined) {
+    fields.push('bpm = ?');
+    values.push(updates.bpm);
   }
 
   if (fields.length === 0) return;
@@ -1433,6 +1837,209 @@ export const getPlaylistsForTrack = async (trackId: string): Promise<Playlist[]>
      WHERE pi.itemType = 'track' AND pi.trackId = ?
      ORDER BY p.name ASC`,
     trackId
+  );
+};
+
+/* PR7: Slot Assignment Functions for LED Readiness */
+
+/**
+ * Get all slots for a unit
+ */
+export const getSlotsByUnit = async (unitId: string): Promise<Slot[]> => {
+  const db = await getDatabase();
+  return db.getAllAsync<Slot>(
+    `SELECT * FROM slots WHERE unitId = ? ORDER BY slotNumber ASC`,
+    unitId
+  );
+};
+
+/**
+ * Get slot by ID
+ */
+export const getSlotById = async (slotId: string): Promise<Slot | null> => {
+  const db = await getDatabase();
+  return db.getFirstAsync<Slot>(
+    `SELECT * FROM slots WHERE id = ? LIMIT 1`,
+    slotId
+  );
+};
+
+/**
+ * Get slot assignment for a record
+ */
+export const getSlotAssignmentByRecord = async (
+  recordId: string
+): Promise<RecordSlotAssignment | null> => {
+  const db = await getDatabase();
+  return db.getFirstAsync<RecordSlotAssignment>(
+    `SELECT * FROM recordSlotAssignments WHERE recordId = ? LIMIT 1`,
+    recordId
+  );
+};
+
+/**
+ * Get slot assignment with slot and record details
+ */
+export const getSlotAssignmentDetails = async (
+  recordId: string
+): Promise<(RecordSlotAssignment & { slot: Slot; unit: Unit; record: RecordModel }) | null> => {
+  const db = await getDatabase();
+  const assignment = await db.getFirstAsync<
+    RecordSlotAssignment & {
+      slotId: string;
+      unitId: string;
+      recordId: string;
+    }
+  >(
+    `SELECT * FROM recordSlotAssignments WHERE recordId = ? LIMIT 1`,
+    recordId
+  );
+
+  if (!assignment) return null;
+
+  const slot = await getSlotById(assignment.slotId);
+  const unit = await getUnitById(assignment.unitId);
+  const record = await getRecordById(assignment.recordId);
+
+  if (!slot || !unit || !record) return null;
+
+  return {
+    ...assignment,
+    slot,
+    unit,
+    record,
+  };
+};
+
+/**
+ * Get all slots for a unit with their assignments
+ */
+export const getSlotsWithAssignments = async (
+  unitId: string
+): Promise<SlotWithAssignment[]> => {
+  const db = await getDatabase();
+  const slots = await db.getAllAsync<
+    Slot & {
+      recordId: string | null;
+      recordTitle: string | null;
+      recordArtist: string | null;
+    }
+  >(
+    `SELECT 
+      s.*,
+      rsa.recordId,
+      r.title as recordTitle,
+      r.artist as recordArtist
+     FROM slots s
+     LEFT JOIN recordSlotAssignments rsa ON s.id = rsa.slotId
+     LEFT JOIN records r ON rsa.recordId = r.id
+     WHERE s.unitId = ?
+     ORDER BY s.slotNumber ASC`,
+    unitId
+  );
+
+  return slots.map((s) => ({
+    id: s.id,
+    unitId: s.unitId,
+    slotNumber: s.slotNumber,
+    createdAt: s.createdAt,
+    recordId: s.recordId || undefined,
+    recordTitle: s.recordTitle || undefined,
+    recordArtist: s.recordArtist || undefined,
+  }));
+};
+
+/**
+ * Assign a record to a slot
+ * Enforces constraints: one record per slot, one slot per record
+ */
+export const assignRecordToSlot = async (
+  recordId: string,
+  slotId: string
+): Promise<RecordSlotAssignment> => {
+  const db = await getDatabase();
+  const timestamp = now();
+
+  // Get slot details
+  const slot = await getSlotById(slotId);
+  if (!slot) {
+    throw new Error('Slot not found');
+  }
+
+  let assignmentToReturn: RecordSlotAssignment | null = null;
+  
+  await db.withTransactionAsync(async () => {
+    // Check if slot is already assigned
+    const existingAssignment = await db.getFirstAsync<RecordSlotAssignment>(
+      `SELECT * FROM recordSlotAssignments WHERE slotId = ? LIMIT 1`,
+      slotId
+    );
+
+    if (existingAssignment && existingAssignment.recordId !== recordId) {
+      throw new Error(`Slot ${slot.slotNumber} is already assigned to another record`);
+    }
+
+    // Remove any existing assignment for this record (one slot per record)
+    await db.runAsync(
+      `DELETE FROM recordSlotAssignments WHERE recordId = ?`,
+      recordId
+    );
+
+    // If slot already has this record, do nothing
+    if (existingAssignment && existingAssignment.recordId === recordId) {
+      assignmentToReturn = existingAssignment;
+      return;
+    }
+
+    // Create new assignment
+    const id = generateId('slotassign');
+    await db.runAsync(
+      `INSERT INTO recordSlotAssignments (id, recordId, unitId, slotId, assignedAt)
+       VALUES (?, ?, ?, ?, ?)`,
+      id,
+      recordId,
+      slot.unitId,
+      slotId,
+      timestamp
+    );
+    
+    // Fetch the newly created assignment
+    const newAssignment = await db.getFirstAsync<RecordSlotAssignment>(
+      `SELECT * FROM recordSlotAssignments WHERE id = ? LIMIT 1`,
+      id
+    );
+    if (newAssignment) {
+      assignmentToReturn = newAssignment;
+    }
+  });
+
+  const assignment = await getSlotAssignmentByRecord(recordId);
+  if (!assignment) {
+    throw new Error('Failed to create slot assignment');
+  }
+
+  return assignment;
+};
+
+/**
+ * Unassign a record from its slot
+ */
+export const unassignRecordFromSlot = async (recordId: string): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `DELETE FROM recordSlotAssignments WHERE recordId = ?`,
+    recordId
+  );
+};
+
+/**
+ * Unassign a slot (remove any record from it)
+ */
+export const unassignSlot = async (slotId: string): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `DELETE FROM recordSlotAssignments WHERE slotId = ?`,
+    slotId
   );
 };
 

@@ -21,7 +21,8 @@ function extractArtistTitleFromVision(visionResult) {
     return null;
   }
 
-  const DEBUG = process.env.DEBUG_IDENTIFICATION === 'true';
+  const config = require('../config');
+  const DEBUG = config.logging.debugIdentification;
   
   // Strategy 1: Web Detection Page Titles (highest priority)
   if (visionResult.pageTitles && visionResult.pageTitles.length > 0) {

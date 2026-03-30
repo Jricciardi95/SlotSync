@@ -15,6 +15,8 @@ import {
   ScrollView,
   Keyboard,
 } from 'react-native';
+import { RecordRow } from '../components/RecordRow';
+import { debounce } from '../utils/debounce';
 import { useFocusEffect } from '../navigation/useFocusEffect';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppScreen } from '../components/AppScreen';
@@ -120,8 +122,22 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [placedIds, setPlacedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('ALL');
   const [searchMode, setSearchMode] = useState<SearchMode>('ALBUMS');
+  
+  // PR4: Debounce search input (200ms delay)
+  useEffect(() => {
+    const debounced = debounce((value: string) => {
+      setDebouncedQuery(value);
+    }, 200);
+    
+    debounced(query);
+    
+    return () => {
+      // Cleanup on unmount
+    };
+  }, [query]);
   const [songResults, setSongResults] = useState<SongResult[]>([]);
   const [artistResults, setArtistResults] = useState<ArtistResult[]>([]);
   const [allArtists, setAllArtists] = useState<string[]>([]);
@@ -291,15 +307,16 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
       .map(s => s.item);
   };
 
+  // PR4: Use debouncedQuery for filtering to reduce re-renders
   const filteredRecords = useMemo(() => {
-    const lower = query.toLowerCase().trim();
+    const lower = debouncedQuery.toLowerCase().trim();
     return records.filter((record) => {
       // First apply placement filter
       const isPlaced = placedIds.has(record.id);
       if (filter === 'PLACED' && !isPlaced) return false;
       if (filter === 'UNPLACED' && isPlaced) return false;
 
-      // Then apply query filter (if query exists)
+      // Then apply query filter (if debouncedQuery exists)
       if (lower) {
         const matchesQuery =
           record.title.toLowerCase().includes(lower) ||
@@ -309,7 +326,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
       return true;
     });
-  }, [records, query, filter, placedIds]);
+  }, [records, debouncedQuery, filter, placedIds]);
 
   // Helper function to filter records by placement
   const getFilteredRecordsByPlacement = useCallback((allRecords: RecordModel[]): RecordModel[] => {
@@ -519,7 +536,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
             setArtistResults([]);
           }
         } else {
-          // No query - show all based on active tab and placement filter
+          // No debouncedQuery - show all based on active tab and placement filter
           if (searchMode === 'ALL') {
             // Show all albums, artists, and songs - filtered by placement
             const allTracks = await searchTracksByTitle('');
@@ -606,97 +623,52 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
     };
 
     performSearch();
-  }, [query, records, searchMode, filter, placedIds, getFilteredRecordsByPlacement]);
+  }, [debouncedQuery, records, searchMode, filter, placedIds, getFilteredRecordsByPlacement]);
 
-  const RecordItem: React.FC<{ item: RecordModel }> = ({ item }) => {
-    const placed = placedIds.has(item.id);
-
-    const handleOptionsPress = () => {
-      setActionSheetRecordId(item.id);
-      setActionSheetVisible(true);
-    };
-
-    const handleRowPress = () => {
-      // CRITICAL: Always store the current tab when navigating to RecordDetail
-      let tabToReturnTo = searchMode;
-      
-      if (searchMode === 'ALBUMS' && lastTabBeforeNavigationRef.current && lastTabBeforeNavigationRef.current !== 'ALBUMS') {
-        tabToReturnTo = lastTabBeforeNavigationRef.current;
-      } else {
-        lastTabBeforeNavigationRef.current = searchMode;
-        tabToReturnTo = searchMode;
-      }
-      
-      navigation.navigate('RecordDetail', { 
-        recordId: item.id,
-        returnToTab: tabToReturnTo,
-      });
-    };
-
+  // PR4: Stable callbacks for RecordRow
+  const handleRecordPress = useCallback((recordId: string) => {
+    // CRITICAL: Always store the current tab when navigating to RecordDetail
+    let tabToReturnTo = searchMode;
+    
+    if (searchMode === 'ALBUMS' && lastTabBeforeNavigationRef.current && lastTabBeforeNavigationRef.current !== 'ALBUMS') {
+      tabToReturnTo = lastTabBeforeNavigationRef.current;
+    } else {
+      lastTabBeforeNavigationRef.current = searchMode;
+      tabToReturnTo = searchMode;
+    }
+    
+    navigation.navigate('RecordDetail', { 
+      recordId,
+      returnToTab: tabToReturnTo,
+    });
+  }, [navigation, searchMode]);
+  
+  const handleRecordOptionsPress = useCallback((recordId: string) => {
+    setActionSheetRecordId(recordId);
+    setActionSheetVisible(true);
+  }, []);
+  
+  // PR4: Memoized render function for records
+  const renderRecord = useCallback(({ item }: { item: RecordModel }) => {
     return (
-      <TouchableOpacity
-        onPress={handleRowPress}
-        activeOpacity={0.9}
-        style={[
-          styles.recordCard,
-          {
-            backgroundColor: colors.surfaceAlt,
-            borderColor: colors.borderSubtle,
-            borderRadius: radius.md,
-            marginBottom: spacing.md,
-          },
-        ]}
-      >
-        {(() => {
-          const { getCoverImageUri } = require('../utils/imageSelection');
-          const imageUri = getCoverImageUri(item.coverImageRemoteUrl, item.coverImageLocalUri);
-          return imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.coverArt}
-            />
-          ) : (
-            <View
-              style={[
-                styles.coverPlaceholder,
-                { backgroundColor: colors.backgroundMuted },
-              ]}
-            >
-              <AppText variant="caption">No cover</AppText>
-            </View>
-          );
-        })()}
-        <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <AppText variant="subtitle">{item.title}</AppText>
-          <AppText variant="body" style={{ marginTop: 4, color: colors.textSecondary }}>
-            {item.artist}
-          </AppText>
-          <AppText
-            variant="caption"
-            style={{
-              marginTop: 8,
-              color: placed ? colors.accent : colors.textMuted,
-            }}
-          >
-            {placed ? 'Placed' : 'Not placed yet'}
-          </AppText>
-        </View>
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            handleOptionsPress();
-          }}
-          style={{ padding: spacing.sm }}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </TouchableOpacity>
+      <RecordRow
+        item={item}
+        isPlaced={placedIds.has(item.id)}
+        onPress={handleRecordPress}
+        onOptionsPress={handleRecordOptionsPress}
+      />
     );
-  };
-
-  const renderRecord = ({ item }: { item: RecordModel }) => {
-    return <RecordItem item={item} />;
-  };
+  }, [placedIds, handleRecordPress, handleRecordOptionsPress]);
+  
+  // PR4: Stable key extractor
+  const keyExtractor = useCallback((item: RecordModel) => item.id, []);
+  
+  // PR4: getItemLayout for stable heights (estimated: 84px per row including margin)
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 84,
+    offset: 84 * index,
+    index,
+  }), []);
 
   // Render section header for alphabetical sections
   const renderSectionHeader = (info: { section: any }) => {
@@ -1108,81 +1080,105 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </View>
           ) : searchMode === 'ALL' ? (
-            <ScrollView 
-              style={{ flex: 1 }}
-              contentContainerStyle={{ gap: spacing.md, paddingBottom: 120 }}
-            >
-                {/* Albums Section */}
-                {filteredRecords.length > 0 && (
-                  <View>
-                    <AppText variant="subtitle" style={{ marginBottom: spacing.sm, paddingHorizontal: spacing.md }}>
-                      Albums ({filteredRecords.length})
-                    </AppText>
-                    {filteredRecords.map((item) => (
-                      <View key={item.id} style={{ paddingHorizontal: spacing.md, marginBottom: spacing.sm }}>
-                        <RecordItem item={item} />
+            <View style={{ flex: 1 }}>
+              {/* PR4: Use FlatList for albums section instead of ScrollView + map */}
+              {filteredRecords.length > 0 && (
+                <View>
+                  <AppText variant="subtitle" style={{ marginBottom: spacing.sm, paddingHorizontal: spacing.md }}>
+                    Albums ({filteredRecords.length})
+                  </AppText>
+                  <FlatList
+                    data={filteredRecords}
+                    keyExtractor={keyExtractor}
+                    renderItem={({ item }) => (
+                      <View style={{ paddingHorizontal: spacing.md, marginBottom: spacing.sm }}>
+                        <RecordRow
+                          item={item}
+                          isPlaced={placedIds.has(item.id)}
+                          onPress={handleRecordPress}
+                          onOptionsPress={handleRecordOptionsPress}
+                        />
                       </View>
-                    ))}
-                  </View>
-                )}
+                    )}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    // PR4: Performance optimizations
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    removeClippedSubviews={true}
+                    getItemLayout={getItemLayout}
+                  />
+                </View>
+              )}
 
-              {/* Artists Section */}
+              {/* PR4: Use FlatList for artists section */}
               {artistResults.length > 0 && (
                 <View>
                   <AppText variant="subtitle" style={{ marginBottom: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.md }}>
                     Artists ({artistResults.length})
                   </AppText>
-                  {artistResults.map((item) => (
-                    <TouchableOpacity
-                      key={item.name}
-                      onPress={() => {
-                        // When clicking artist from ALL tab, switch to ALBUMS to show their albums
-                        // Store ALL in ref so we can return to it when navigating back from album
-                        // Mark this as an intentional tab switch so restoreTab doesn't interfere
-                        if (searchMode === 'ALL') {
-                          isIntentionalTabSwitchRef.current = true;
-                          lastTabBeforeNavigationRef.current = 'ALL';
-                          setSearchMode('ALBUMS');
-                          setTimeout(() => {
-                            isIntentionalTabSwitchRef.current = false;
-                          }, 500);
-                        }
-                        setQuery(item.name);
-                      }}
-                      style={[
-                        styles.recordCard,
-                        {
-                          backgroundColor: colors.surfaceAlt,
-                          borderColor: colors.borderSubtle,
-                          borderRadius: radius.md,
-                          marginHorizontal: spacing.md,
-                          marginBottom: spacing.sm,
-                        },
-                      ]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <AppText variant="subtitle">{item.name}</AppText>
-                        <AppText
-                          variant="caption"
-                          style={{ marginTop: 4, color: colors.textSecondary }}
-                        >
-                          {item.albumCount} album{item.albumCount === 1 ? '' : 's'} in collection
-                        </AppText>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                  <FlatList
+                    data={artistResults}
+                    keyExtractor={(item) => item.name}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        onPress={() => {
+                          // When clicking artist from ALL tab, switch to ALBUMS to show their albums
+                          // Store ALL in ref so we can return to it when navigating back from album
+                          // Mark this as an intentional tab switch so restoreTab doesn't interfere
+                          if (searchMode === 'ALL') {
+                            isIntentionalTabSwitchRef.current = true;
+                            lastTabBeforeNavigationRef.current = 'ALL';
+                            setSearchMode('ALBUMS');
+                            setTimeout(() => {
+                              isIntentionalTabSwitchRef.current = false;
+                            }, 500);
+                          }
+                          setQuery(item.name);
+                        }}
+                        style={[
+                          styles.recordCard,
+                          {
+                            backgroundColor: colors.surfaceAlt,
+                            borderColor: colors.borderSubtle,
+                            borderRadius: radius.md,
+                            marginHorizontal: spacing.md,
+                            marginBottom: spacing.sm,
+                          },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <AppText variant="subtitle">{item.name}</AppText>
+                          <AppText
+                            variant="caption"
+                            style={{ marginTop: 4, color: colors.textSecondary }}
+                          >
+                            {item.albumCount} album{item.albumCount === 1 ? '' : 's'} in collection
+                          </AppText>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    // PR4: Performance optimizations
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    removeClippedSubviews={true}
+                  />
                 </View>
               )}
 
-              {/* Songs Section */}
+              {/* PR4: Use FlatList for songs section */}
               {songResults.length > 0 && (
                 <View>
                   <AppText variant="subtitle" style={{ marginBottom: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.md }}>
                     Songs ({songResults.length})
                   </AppText>
-                  {songResults.map((item) => (
+                  <FlatList
+                    data={songResults}
+                    keyExtractor={(item) => item.title}
+                    renderItem={({ item }) => (
                     <TouchableOpacity
-                      key={item.title}
                       onPress={() => {
                         // Store current tab (SONGS or ALL) before navigating to SongDetail
                         // This ensures we can return to the correct tab when navigating back from album
@@ -1214,7 +1210,14 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
                         </AppText>
                       </View>
                     </TouchableOpacity>
-                  ))}
+                    )}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    // PR4: Performance optimizations
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    removeClippedSubviews={true}
+                  />
                 </View>
               )}
 
@@ -1222,11 +1225,11 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
               {filteredRecords.length === 0 && artistResults.length === 0 && songResults.length === 0 && (
                 <View style={{ padding: spacing.xl, alignItems: 'center' }}>
                   <AppText variant="body" style={{ color: colors.textSecondary, textAlign: 'center' }}>
-                    No results found for "{query}"
+                    No results found for "{debouncedQuery}"
                   </AppText>
                 </View>
               )}
-              </ScrollView>
+            </View>
           ) : searchMode === 'ARTISTS' ? (
             <View style={{ flex: 1, flexDirection: 'row' }}>
               <SectionList

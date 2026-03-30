@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.SlotSync"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,17 +22,27 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-sqlite",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SlotSync to access your camera"
+        }
+      ]
     ],
     "extra": {
-      "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.215:3000"
+      "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.165:3000"
     }
   }
 }

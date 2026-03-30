@@ -1,229 +1,321 @@
-# Testing Commands for Identification Pipeline
+# Testing Commands for SlotSync
 
-## Quick Start
+## Prerequisites
+
+1. **Backend dependencies installed:**
+   ```bash
+   cd /Users/jamesricciardi/SlotSync/backend-example
+   npm install
+   ```
+
+2. **Frontend dependencies installed:**
+   ```bash
+   cd /Users/jamesricciardi/SlotSync
+   npm install
+   ```
+
+3. **Environment variables set:**
+   - `DISCOGS_PERSONAL_ACCESS_TOKEN` (if not in start script)
+   - `GOOGLE_APPLICATION_CREDENTIALS` (optional, for Vision API)
+
+---
+
+## Quick Start (Two Terminal Windows)
 
 ### Terminal 1: Backend Server
 
 ```bash
-cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
-export ENABLE_GOOGLE_VISION='true'
-export CONFIDENCE_THRESHOLD='0.5'
-npm start
+cd /Users/jamesricciardi/SlotSync
+./start-backend-for-expo.sh
 ```
 
-**Expected Output:**
+**Expected output:**
 ```
-✅ Google Vision API client initialized
-✅ Connected to local database
-✅ Database table ready
-[Config] ⚙️  Confidence threshold: 0.5 (set CONFIDENCE_THRESHOLD env var to change)
-🚀 SlotSync API Server (Enhanced) running on port 3000
-📍 Health check: http://localhost:3000/health
-📍 API info: http://localhost:3000/api
-📍 Identify endpoint: http://localhost:3000/api/identify-record
-✅ Ready to identify records!
+🚀 Starting SlotSync Backend for Expo Go...
+✅ Google Vision credentials found
+✅ Discogs API token found
+✅ Your IP address: 192.168.1.XXX
+🔧 Starting server on port 3000...
+
+🚀 SlotSync API Server running on port 3000
+📍 Listening on: 0.0.0.0:3000 (all interfaces)
+📍 LAN address: http://192.168.1.XXX:3000
+📍 Health check: http://192.168.1.XXX:3000/health
 ```
+
+**Note the IP address** - you'll need it for the frontend!
 
 ---
 
-### Terminal 2: Frontend App (Expo)
+### Terminal 2: Frontend (Expo)
 
 ```bash
 cd /Users/jamesricciardi/SlotSync
-npx expo start
+
+# Set API base URL (replace XXX with your actual IP from Terminal 1)
+export EXPO_PUBLIC_API_BASE_URL=http://192.168.1.XXX:3000
+
+# Or create/update .env file:
+echo "EXPO_PUBLIC_API_BASE_URL=http://192.168.1.XXX:3000" > .env
+
+# Start Expo
+npx expo start --clear
 ```
 
-Then:
-- Press `i` for iOS simulator
-- Press `a` for Android emulator
-- Scan QR code with Expo Go app on your phone
+**Expected output:**
+```
+› Metro waiting on exp://192.168.1.XXX:8081
+› Scan the QR code above with Expo Go (Android) or the Camera app (iOS)
+```
+
+**On iPhone:**
+1. Open Camera app
+2. Scan the QR code
+3. Tap the notification to open in Expo Go
 
 ---
 
-## What to Watch For in Backend Logs
+## Testing Backend Endpoints
 
-### When Image is Received:
-```
-[API] 📸 Image received: cover.jpg
-[API] 📸 Image size: 245.32KB (0.24MB)
-[API] 📸 Image MIME type: image/jpeg
-[API] ✅ Image size is reasonable (245.32KB)
-```
+### 1. Health Check (Quick Connectivity Test)
 
-### During Vision API Processing:
-```
-[API] 🔍 Starting Google Vision analysis...
-[API] 🔍 Image buffer size: 245.32KB
-[API] 🔍 Requesting: WEB_DETECTION, TEXT_DETECTION, LABEL_DETECTION
-[Google Vision] 📊 Vision API Response Summary:
-[Google Vision]   - Web entities: 12
-[Google Vision]   - Page titles: 8
-[Google Vision]   - Similar images: 5
-[Google Vision]   - Labels: 10
-[Google Vision]   - OCR text length: 45 chars
-[Google Vision] 🎯 Candidate Extraction Summary:
-[Google Vision]   Total candidates: 3
-[Google Vision] 📋 All candidates (sorted by confidence):
-  1. "Mick Jagger" - "Primitive Cool"
-     Confidence: 0.950, Source: all_caps_multiline
+```bash
+# Replace XXX with your IP from Terminal 1
+curl http://192.168.1.XXX:3000/health
 ```
 
-### During Discogs Search:
-```
-[Discogs] 🔍 Starting Discogs search...
-[Discogs] 🔍 Artist: "Mick Jagger"
-[Discogs] 🔍 Title: "Primitive Cool"
-[Discogs] 🔍 Generated 15 query variations
-[Discogs]   Query 1/15: "Mick Jagger Primitive Cool"
-[Discogs]     → Found 3 results
-[Discogs]     ✅ Good match: "Mick Jagger" - "Primitive Cool"
-[Discogs]        Similarity: 0.985 (artist: 1.000, title: 0.960)
-[Discogs] 📊 Search Summary:
-[Discogs]   Total results: 3
-[Discogs]   🏆 Best similarity: 0.985
-[Discogs] 📀 Processing tracklist: 12 entries
-[Discogs] ✅ Extracted 12 valid tracks
+**Expected response:**
+```json
+{"ok":true,"time":"2024-12-21T..."}
 ```
 
-### On Success:
-```
-[API] ✅ ✅ ✅ IDENTIFICATION SUCCESS ✅ ✅ ✅
-[API]   Confidence: 0.923 (threshold: 0.5)
-[API]   Source: discogs
-[API]   Best match: "Mick Jagger" - "Primitive Cool"
-[API]   Year: 1987
-[API]   Tracks: 12
-[API]   Processing time: 3245ms
+### 2. Test from iPhone Safari
+
+1. Open Safari on iPhone
+2. Navigate to: `http://192.168.1.XXX:3000/health`
+3. Should see JSON response instantly
+
+### 3. Test Identify Endpoint (Manual)
+
+```bash
+# Replace XXX with your IP and PATH_TO_IMAGE with actual image path
+curl -X POST http://192.168.1.XXX:3000/api/identify-record \
+  -F "image=@/path/to/album-cover.jpg" \
+  -H "Content-Type: multipart/form-data"
 ```
 
-### On Failure (with suggestions):
-```
-[API] ❌ ❌ ❌ IDENTIFICATION FAILED ❌ ❌ ❌
-[API]   Best confidence: 0.420 (threshold: 0.5)
-[API]   Candidates attempted: 3
-[API]   Discogs searches: 3
-[API] 💡 Suggestions available: 2 Discogs matches
-[API] 💡 Top suggestions:
-[API]   1. "Mick Jagger" - "Primitive Cool" (similarity: 0.850, confidence: 0.420)
+**Expected response:**
+```json
+{
+  "success": true,
+  "confidence": 0.95,
+  "artist": "Pink Floyd",
+  "albumTitle": "The Dark Side of the Moon",
+  ...
+}
 ```
 
 ---
 
-## Optional: Test API Directly with curl
+## Monitoring Request Tracing
 
-### Test with Image File:
-```bash
-curl -X POST http://localhost:3000/api/identify-record \
-  -F 'image=@/path/to/album/cover.jpg' \
-  -H 'Content-Type: multipart/form-data' \
-  | jq '.'
+### Watch Backend Logs
+
+In Terminal 1 (backend), you'll see detailed request tracing:
+
+```
+[REQ abc123] START /api/identify-record content-type=multipart/form-data
+[REQ abc123] parse_upload OK fileSizeBytes=234567 mime=image/jpeg
+[REQ abc123] phase1_start
+[REQ abc123] embedding_compute_start
+[REQ abc123] embedding_compute_complete elapsed=1234ms
+[REQ abc123] vector_search_start
+[REQ abc123] vector_search_complete elapsed=234ms top1Similarity=0.95 top1Id=12345 top2Similarity=0.87
+[REQ abc123] decideVisionStrategy_complete elapsed=5ms decision=ACCEPT_EMBEDDING_FINAL
+[REQ abc123] phase1_complete elapsed=1473ms candidates=1
+[REQ abc123] phase2_start candidates=1
+[REQ abc123] discogs_hydrate_start discogsId=12345
+[REQ abc123] discogs_hydrate_complete elapsed=890ms
+[REQ abc123] phase2_complete elapsed=890ms
+[REQ abc123] phase3_start
+[REQ abc123] phase3_complete elapsed=234ms
+[REQ abc123] before_response_send
+[REQ abc123] END status=200 totalMs=2597
 ```
 
-### Test with Barcode:
-```bash
-curl -X POST http://localhost:3000/api/identify-record \
-  -H 'Content-Type: application/json' \
-  -d '{"barcode":"0123456789012"}' \
-  | jq '.'
-```
+### Watch for Issues
 
-### Test with Text Search:
-```bash
-curl -X POST http://localhost:3000/api/identify-record \
-  -H 'Content-Type: application/json' \
-  -d '{"artist":"Mick Jagger","title":"Primitive Cool"}' \
-  | jq '.'
+**If request hangs:**
+- Look for last `_start` without matching `_complete`
+- Check for `TIMEOUT` messages
+- Look for `HARD TIMEOUT` after 90s
+
+**If timeout occurs:**
+```
+[REQ abc123] TIMEOUT embedding after 30000ms
+[REQ abc123] ERROR embedding_compute elapsed=30001ms Error: TIMEOUT:embedding:30000
+[REQ abc123] END status=500 totalMs=30002
 ```
 
 ---
 
-## Testing Checklist
+## Testing Frontend Features
 
-### ✅ Image Quality
-- [ ] Image is resized to max 1024px (check logs)
-- [ ] Image size is reasonable (< 2MB, ideally < 1MB)
-- [ ] Image format is JPEG (check MIME type in logs)
+### 1. Photo Scan
+1. Open app in Expo Go
+2. Navigate to "Scan" or "Batch Scan"
+3. Take photo of album cover
+4. Watch Terminal 1 for request tracing logs
+5. Should see identification result in app
 
-### ✅ Vision API
-- [ ] Vision API request is logged
-- [ ] Vision response shows web entities, page titles, OCR text
-- [ ] Candidates are extracted with confidence scores
-- [ ] All-caps text is detected correctly
+### 2. CSV Import
+1. Navigate to "CSV Import" screen
+2. Select CSV file
+3. Watch Terminal 1 for multiple identification requests
+4. Check that albums appear with cover art and track lists
 
-### ✅ Discogs Search
-- [ ] Multiple query variations are tried
-- [ ] Similarity scores are calculated (artist + title)
-- [ ] Track list is extracted (if available)
-- [ ] Best match is selected
-
-### ✅ Success Cases
-- [ ] Popular albums identify with confidence > 0.5
-- [ ] Track lists are included in response
-- [ ] Processing time is reasonable (< 10 seconds)
-
-### ✅ Failure Cases
-- [ ] Suggestions are always returned (even if below threshold)
-- [ ] Extracted text is included in error response
-- [ ] Debug information is comprehensive
+### 3. Manual Lookup
+1. Navigate to album detail screen
+2. Tap "Lookup Metadata" or similar
+3. Enter artist and title
+4. Should fetch from Discogs and update album
 
 ---
 
 ## Troubleshooting
 
-### Vision API Timeout:
-- **Symptom**: "Vision API timeout after 45 seconds"
-- **Fix**: Image may be too large, check image size in logs
-- **Solution**: Frontend should resize to 1024px max (already implemented)
+### Backend won't start
 
-### No Candidates Extracted:
-- **Symptom**: "No candidates extracted" in logs
-- **Possible causes**:
-  - Poor image quality
-  - No text visible on cover
-  - Vision API returned no useful data
-- **Check**: Look at Vision response summary in logs
+```bash
+# Check if port 3000 is in use
+lsof -ti:3000
 
-### Low Confidence:
-- **Symptom**: Confidence below 0.5 threshold
-- **Fix**: Lower `CONFIDENCE_THRESHOLD` to 0.4
-- **Command**: `export CONFIDENCE_THRESHOLD='0.4'`
+# Kill process if needed
+kill -9 $(lsof -ti:3000)
 
-### No Suggestions:
-- **Symptom**: Error response has no suggestions
-- **Fix**: Check Discogs API token is set correctly
-- **Check**: Look for "Discogs search" logs
+# Try again
+./start-backend-for-expo.sh
+```
+
+### Frontend can't reach backend
+
+1. **Check IP address matches:**
+   ```bash
+   # Get your IP
+   ifconfig | grep "inet " | grep -v 127.0.0.1
+   
+   # Update .env with correct IP
+   echo "EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:3000" > .env
+   ```
+
+2. **Test connectivity from iPhone:**
+   - Open Safari: `http://YOUR_IP:3000/health`
+   - Should see JSON response
+
+3. **Check firewall:**
+   - Mac: System Settings > Network > Firewall
+   - Ensure port 3000 is allowed
+
+### Request timing out
+
+1. **Check backend logs** for which phase is slow
+2. **Look for heartbeat warnings** (>5s steps)
+3. **Check timeout values** in logs
+4. **Verify network connectivity** between iPhone and Mac
+
+### Syntax errors
+
+```bash
+# Check backend syntax
+cd /Users/jamesricciardi/SlotSync/backend-example
+node -c server-hybrid.js
+
+# Should output: (no errors means success)
+```
 
 ---
 
-## Configuration Options
+## Full Test Sequence
 
-### Confidence Threshold:
+1. **Start backend:**
+   ```bash
+   cd /Users/jamesricciardi/SlotSync
+   ./start-backend-for-expo.sh
+   ```
+
+2. **Note the IP address** from backend startup logs
+
+3. **Start frontend:**
+   ```bash
+   cd /Users/jamesricciardi/SlotSync
+   export EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:3000
+   npx expo start --clear
+   ```
+
+4. **Test health endpoint:**
+   ```bash
+   curl http://YOUR_IP:3000/health
+   ```
+
+5. **Open app on iPhone** via Expo Go QR code
+
+6. **Scan an album cover** and watch logs in Terminal 1
+
+7. **Verify:**
+   - Request completes with `END status=200`
+   - Album appears in library with cover art
+   - Track list is populated
+
+---
+
+## Environment Variables (Optional)
+
+You can customize timeout values:
+
 ```bash
-# More lenient (more matches, possible false positives)
-export CONFIDENCE_THRESHOLD='0.4'
+# In Terminal 1 (before starting backend)
+export EMBEDDING_TIMEOUT_MS=30000
+export VECTOR_SEARCH_TIMEOUT_MS=5000
+export VISION_TIMEOUT_MS=20000
+export DISCOGS_FETCH_TIMEOUT_MS=15000
+export DISCOGS_SEARCH_TIMEOUT_MS=15000
+export REQUEST_TIMEOUT_MS=90000
 
-# Balanced (default)
-export CONFIDENCE_THRESHOLD='0.5'
-
-# Stricter (fewer matches, higher quality)
-export CONFIDENCE_THRESHOLD='0.6'
-```
-
-### Disable Google Vision (for testing):
-```bash
-export ENABLE_GOOGLE_VISION='false'
+# Then start backend
+./start-backend-for-expo.sh
 ```
 
 ---
 
-## Expected Log Flow
+## Quick Reference
 
-1. **Image Received** → Image metadata logged
-2. **Vision API** → Request sent, response received
-3. **Candidate Extraction** → Candidates extracted with confidence
-4. **Discogs Search** → Queries tried, results found
-5. **Track Extraction** → Tracks extracted from Discogs
-6. **Success/Failure** → Clear result with all details
+| Command | Purpose |
+|---------|---------|
+| `./start-backend-for-expo.sh` | Start backend server |
+| `npx expo start --clear` | Start frontend with cleared cache |
+| `curl http://IP:3000/health` | Test backend connectivity |
+| `node -c backend-example/server-hybrid.js` | Check backend syntax |
+| `lsof -ti:3000` | Check if port 3000 is in use |
 
-All steps should be visible in logs with emoji indicators for easy scanning.
+---
+
+## Success Indicators
+
+✅ **Backend running:**
+- See startup logs with IP address
+- Health endpoint returns JSON
+
+✅ **Frontend connected:**
+- Expo shows QR code
+- App loads in Expo Go
+- No network errors in Expo logs
+
+✅ **Identification working:**
+- Request logs show `END status=200`
+- Album appears with correct metadata
+- Cover art and tracks populated
+
+✅ **Request tracing working:**
+- See `[REQ <id>]` logs for each request
+- All phases complete with elapsed times
+- No timeouts or errors

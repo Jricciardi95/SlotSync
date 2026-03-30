@@ -2,6 +2,16 @@
 
 This directory contains backend server implementations for SlotSync record identification.
 
+## 🔒 Security Notice
+
+**IMPORTANT:** Never commit credentials or secrets to version control.
+
+- **Google Cloud credentials** (`credentials.json`): Must be kept local-only. If ever committed, rotate immediately.
+- **Environment variables** (`.env`): Contains API keys and tokens. Copy `.env.example` to `.env` and fill in your values.
+- **Discogs tokens**: Store in environment variables, never in code.
+
+See `.env.example` for required configuration. The server supports **degraded mode**: if Google Vision credentials are missing, identification will run using Discogs-only (with reduced accuracy).
+
 ## Available Servers
 
 ### 1. Mock Server (`server.js`)

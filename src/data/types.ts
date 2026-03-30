@@ -36,6 +36,9 @@ export type RecordModel = {
   coverImageRemoteUrl?: string | null;
   discogsId?: string | null;
   musicbrainzId?: string | null;
+  // PR3: Normalized fields for duplicate prevention
+  normalizedTitle?: string | null;
+  normalizedArtist?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -65,6 +68,28 @@ export type RecordLocationDetails = RecordLocation & {
   rowName: string | null;
 };
 
+// PR7: Slot and RecordSlotAssignment types for LED readiness
+export type Slot = {
+  id: string;
+  unitId: string;
+  slotNumber: number;
+  createdAt: string;
+};
+
+export type RecordSlotAssignment = {
+  id: string;
+  recordId: string;
+  unitId: string;
+  slotId: string;
+  assignedAt: string;
+};
+
+export type SlotWithAssignment = Slot & {
+  recordId?: string | null;
+  recordTitle?: string | null;
+  recordArtist?: string | null;
+};
+
 export type Session = {
   id: string;
   startedAt: string;
@@ -88,6 +113,7 @@ export type Track = {
   discNumber?: number | null;
   side?: string | null;
   durationSeconds?: number | null;
+  bpm?: number | null; // Beats Per Minute - from Spotify/Apple Music API
 };
 
 export type BatchJob = {

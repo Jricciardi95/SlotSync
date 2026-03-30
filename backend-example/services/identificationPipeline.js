@@ -15,6 +15,7 @@ const gpt4Vision = require('./gpt4Vision');
 const { searchReleaseByArtistAndTitle } = require('./musicbrainzService');
 const { searchDiscogsByBarcode } = require('../server-hybrid');
 const { processImageWithGoogleVision, extractCandidates, key } = require('../server-hybrid');
+const { discogsHttpRequest } = require('./discogsHttpClient');
 
 /**
  * Phase 1: Generate Candidates from Input
@@ -52,7 +53,8 @@ async function generateCandidatesFromInput(req, imageBuffer, debugInfo) {
     }
 
     // Google Vision processing
-    const ENABLE_GOOGLE_VISION = process.env.ENABLE_GOOGLE_VISION !== 'false';
+    const config = require('../config');
+    const ENABLE_GOOGLE_VISION = config.googleVision.enabled;
     if (ENABLE_GOOGLE_VISION && req.visionClient) {
       try {
         const visionStart = Date.now();
@@ -287,7 +289,8 @@ async function resolveBestAlbum(candidates, imageHash, debugInfo) {
 
   let bestAlbum = null;
   let bestConfidence = 0;
-  const CONFIDENCE_THRESHOLD = parseFloat(process.env.CONFIDENCE_THRESHOLD || '0.5');
+  const config = require('../config');
+  const CONFIDENCE_THRESHOLD = config.scoring.confidenceThreshold;
 
   // Short-circuit for barcode matches
   const barcodeCandidate = candidates.find(c => c.source === 'barcode_discogs' || c.source === 'discogs_barcode');
@@ -418,9 +421,10 @@ async function enrichAlbumMetadata(bestAlbum, debugInfo) {
   const { getReleaseDetailsWithTracks, getCoverArtUrlForRelease } = require('./musicbrainzService');
   const axios = require('axios');
   
-  const DISCOGS_PERSONAL_ACCESS_TOKEN = process.env.DISCOGS_PERSONAL_ACCESS_TOKEN || process.env.DISCOGS_TOKEN;
-  const DISCOGS_API_KEY = process.env.DISCOGS_API_KEY || process.env.DISCOGS_CONSUMER_KEY;
-  const DISCOGS_API_SECRET = process.env.DISCOGS_API_SECRET || process.env.DISCOGS_CONSUMER_SECRET;
+  const config = require('../config');
+  const DISCOGS_PERSONAL_ACCESS_TOKEN = config.discogs.personalAccessToken;
+  const DISCOGS_API_KEY = config.discogs.apiKey;
+  const DISCOGS_API_SECRET = config.discogs.apiSecret;
 
   const primary = {
     artist: bestAlbum.artist,
@@ -447,16 +451,22 @@ async function enrichAlbumMetadata(bestAlbum, debugInfo) {
         headers['Authorization'] = `Discogs token=${DISCOGS_PERSONAL_ACCESS_TOKEN}`;
       }
 
-      const releaseResponse = await axios.get(`https://api.discogs.com/releases/${primary.discogsId}`, {
-        params: DISCOGS_PERSONAL_ACCESS_TOKEN ? {} : {
-          key: DISCOGS_API_KEY,
-          secret: DISCOGS_API_SECRET,
+      const release = await discogsHttpRequest(
+        `https://api.discogs.com/releases/${primary.discogsId}`,
+        {
+          params: DISCOGS_PERSONAL_ACCESS_TOKEN ? {} : {
+            key: DISCOGS_API_KEY,
+            secret: DISCOGS_API_SECRET,
+          },
+          headers: headers,
         },
-        headers: headers,
-        timeout: 5000,
-      });
-
-      const release = releaseResponse.data;
+        {
+          timeoutMs: 5000,
+          reqId: 'N/A',
+          op: 'release_fetch',
+          meta: { discogsId: primary.discogsId }
+        }
+      );
       
       // Extract year
       if (release.year && !primary.year) {

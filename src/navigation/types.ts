@@ -29,6 +29,7 @@ export type LibraryStackParamList = {
   BatchScan: undefined;
   BatchReview: { photoIds?: string[]; jobId?: string; autoStart?: boolean };
   DevTest: undefined; // Dev-only test screen
+  VirtualShelf: { unitId: string; recordId?: string }; // PR7: Virtual shelf for slot assignment
 };
 
 export type ModesStackParamList = {

@@ -162,34 +162,66 @@ async function callBackendIdentification(
 
     const data = await response.json();
     
-    // Backend returns clean JSON:
-    // { success, confidence, artist, albumTitle, releaseYear, discogsId, coverImageUrl, tracks }
-    if (!data.success || !data.artist || !data.albumTitle) {
-      throw {
-        code: 'API_ERROR' as const,
-        message: 'Invalid response format from backend',
-        originalError: data,
-      } as IdentificationError;
+    // Backend returns new format:
+    // { status, confidenceLevel, bestMatch: { artist, title, year, discogsId, coverImageRemoteUrl, tracks }, suggestions, ... }
+    // OR legacy format: { success, artist, albumTitle, ... }
+    
+    // Check for new format first (bestMatch structure)
+    if (data.bestMatch && data.bestMatch.artist && data.bestMatch.title) {
+      // New format: use bestMatch
+      const bestMatch = data.bestMatch;
+      const album: ResolvedAlbum = {
+        artist: bestMatch.artist,
+        albumTitle: bestMatch.title,
+        releaseYear: bestMatch.year ?? undefined,
+        discogsId: bestMatch.discogsId ?? undefined,
+        musicbrainzId: bestMatch.musicbrainzId ?? undefined,
+        coverHdUrl: bestMatch.coverImageRemoteUrl ?? undefined,
+        tracks: (bestMatch.tracks || []).map((t: any) => ({
+          title: t.title,
+          position: t.position || t.trackNumber || 0,
+          side: t.side ?? undefined,
+          discNumber: t.discNumber ?? undefined,
+          durationSeconds: t.durationSeconds ?? undefined,
+        })),
+        confidence: bestMatch.confidence ?? data.confidence ?? 0.5,
+        sourceCandidates: [], // Backend doesn't return candidates in response
+      };
+      
+      debug.log('IDENTIFICATION', `✅ Backend identified: "${album.artist}" - "${album.albumTitle}" (confidence: ${album.confidence.toFixed(3)})`);
+      return album;
     }
     
-    // Convert backend response to ResolvedAlbum format
-    const album: ResolvedAlbum = {
-      artist: data.artist,
-      albumTitle: data.albumTitle,
-      releaseYear: data.releaseYear ?? undefined,
-      discogsId: data.discogsId ?? undefined,
-      musicbrainzId: data.musicbrainzId ?? undefined,
-      coverHdUrl: data.coverImageUrl ?? undefined,
-      tracks: (data.tracks || []).map((t: any) => ({
-        title: t.title,
-        position: t.position || 0,
-        side: t.side ?? undefined,
-        discNumber: t.discNumber ?? undefined,
-        durationSeconds: t.durationSeconds ?? undefined,
-      })),
-      confidence: data.confidence || 0.5,
-      sourceCandidates: [], // Backend doesn't return candidates in response
-    };
+    // Legacy format: { success, artist, albumTitle, ... }
+    if (data.success && data.artist && data.albumTitle) {
+      const album: ResolvedAlbum = {
+        artist: data.artist,
+        albumTitle: data.albumTitle,
+        releaseYear: data.releaseYear ?? undefined,
+        discogsId: data.discogsId ?? undefined,
+        musicbrainzId: data.musicbrainzId ?? undefined,
+        coverHdUrl: data.coverImageUrl ?? undefined,
+        tracks: (data.tracks || []).map((t: any) => ({
+          title: t.title,
+          position: t.position || 0,
+          side: t.side ?? undefined,
+          discNumber: t.discNumber ?? undefined,
+          durationSeconds: t.durationSeconds ?? undefined,
+        })),
+        confidence: data.confidence || 0.5,
+        sourceCandidates: [], // Backend doesn't return candidates in response
+      };
+      
+      debug.log('IDENTIFICATION', `✅ Backend identified: "${album.artist}" - "${album.albumTitle}" (confidence: ${album.confidence.toFixed(3)})`);
+      return album;
+    }
+    
+    // Invalid response format
+    throw {
+      code: 'API_ERROR' as const,
+      message: 'Invalid response format from backend',
+      originalError: data,
+    } as IdentificationError;
     
     debug.log('IDENTIFICATION', `✅ Backend identified: "${album.artist}" - "${album.albumTitle}" (confidence: ${album.confidence.toFixed(3)})`);
     

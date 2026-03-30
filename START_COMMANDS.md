@@ -1,100 +1,158 @@
-# Quick Start Commands - Expo Go
+# 🚀 SlotSync - Complete Terminal Commands
 
-## Terminal 1 - Backend Server
+## Quick Start
 
-```bash
-cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
-export ENABLE_GOOGLE_VISION='true'
-export OPENAI_API_KEY='sk-your-key-here'
-export ENABLE_GPT4_VISION='true'
-export ENABLE_IMAGE_PREPROCESSING='true'
-export ENABLE_IMAGE_EMBEDDINGS='true'
-export CONFIDENCE_THRESHOLD='0.5'
-npm start
-```
-
-**⚠️ IMPORTANT:** Replace `'sk-your-key-here'` with your actual OpenAI API key!
-
----
-
-## Terminal 2 - Frontend (Expo)
-
+### Terminal 1 - Backend Server
 ```bash
 cd /Users/jamesricciardi/SlotSync
-npx expo start
+./start-backend-for-expo.sh
 ```
 
-Then:
-1. **Scan the QR code** shown in the terminal with the **Expo Go** app on your phone
-2. Or press `s` in the terminal to open in Expo Go
+**OR manually:**
+```bash
+cd /Users/jamesricciardi/SlotSync/backend-example
+node server-hybrid.js
+```
+
+**Wait for:** `🚀 SlotSync API Server running on port 3000`
 
 ---
 
-## Expected Output
-
-### Terminal 1 (Backend) should show:
-```
-[Config] ✅ GPT-4 Vision enabled
-[Config] ✅ Image Embeddings enabled
-[Config] ✅ Image Preprocessing enabled
-[Config] 📊 Stored embeddings: 0
-[GPT-4 Vision] ✅ OpenAI client initialized
-[Image Embedding] ✅ OpenAI client initialized
-✅ Google Vision API client initialized
-✅ Database tables ready (records + embeddings)
-🚀 SlotSync API Server (Enhanced) running on port 3000
-📍 Health check: http://localhost:3000/health
-✅ Ready to identify records!
+### Terminal 2 - Frontend (Expo)
+```bash
+cd /Users/jamesricciardi/SlotSync
+npx expo start --clear
 ```
 
-### Terminal 2 (Frontend) should show:
-```
-› Metro waiting on exp://192.168.x.x:8081
-› Scan the QR code above with Expo Go
-```
+**Wait for:** `› Metro waiting on exp://...`  
+**Then:** Scan QR code with Expo Go app on your phone
 
 ---
 
-## Features Enabled
+## Verify Everything is Working
 
-✅ **Google Vision API** - OCR and web detection  
-✅ **GPT-4 Vision** - Intelligent fallback for difficult covers  
-✅ **Image Preprocessing** - Enhances images before OCR  
-✅ **Embedding Database** - Visual similarity matching  
+### Test Backend Health
+```bash
+curl http://192.168.1.215:3000/health
+```
+**Expected:** `{"status":"ok"}`
+
+### Test Metadata Endpoint
+```bash
+curl -X POST http://192.168.1.215:3000/api/identify-by-text \
+  -H 'Content-Type: application/json' \
+  -d '{"artist":"Whitney Houston","title":"Whitney"}'
+```
+**Expected:** JSON response with `coverImageRemoteUrl`, `tracks`, `year`, `discogsId`
 
 ---
 
 ## Troubleshooting
 
-### Backend won't start?
-- Check that all environment variables are set
-- Make sure OpenAI API key is valid
-- Verify port 3000 is not in use
+### Backend Won't Start
+```bash
+# Check if port 3000 is in use
+lsof -ti:3000
 
-### Expo won't connect?
-- Make sure phone and computer are on same Wi-Fi
-- Try pressing `r` in Terminal 2 to reload
-- Restart Expo: `Ctrl+C` then `npx expo start` again
+# Kill process on port 3000
+kill -9 $(lsof -ti:3000)
 
-### GPT-4 Vision not working?
-- Verify `OPENAI_API_KEY` is set correctly
-- Check `ENABLE_GPT4_VISION='true'` is set
-- Look for `[Config] ✅ GPT-4 Vision enabled` in logs
+# Restart backend
+cd /Users/jamesricciardi/SlotSync
+./start-backend-for-expo.sh
+```
+
+### Frontend Can't Connect to Backend
+```bash
+# 1. Verify IP address in app.json
+cat app.json | grep EXPO_PUBLIC_API_BASE_URL
+# Should show: "http://192.168.1.215:3000"
+
+# 2. Check .env file
+cat .env | grep EXPO_PUBLIC_API_BASE_URL
+# Should show: EXPO_PUBLIC_API_BASE_URL=http://192.168.1.215:3000
+
+# 3. Get your current IP
+ifconfig | grep "inet " | grep -v 127.0.0.1
+
+# 4. Update IP if needed (replace YOUR_IP with actual IP)
+echo "EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:3000" > .env
+
+# 5. Restart Expo with cleared cache
+npx expo start --clear
+```
+
+### CSV Import Not Working
+1. **Check Terminal 1 (Backend)** - Look for:
+   ```
+   [API] 📥 INCOMING REQUEST: /api/identify-by-text
+   ```
+
+2. **Check Terminal 2 (Expo)** - Look for:
+   ```
+   [CSV Import] 🎬 handleImport() CALLED
+   [CSV Import] 🚀 ALWAYS fetching metadata BEFORE saving record...
+   [CSV Import] 📡 Response received in XXXms: 200 OK
+   [CSV Import] ✅ Set cover art: https://...
+   [CSV Import] ✅ Set X tracks
+   ```
+
+3. **If logs are missing:**
+   - Restart both terminals
+   - Try CSV import again
+   - Share full logs from both terminals
 
 ---
 
-## Optional: Disable Features
+## Full Command Sequence
 
-If you want to disable certain features, just remove or set to `'false'`:
-
+### First Time Setup
 ```bash
-# Disable preprocessing
-export ENABLE_IMAGE_PREPROCESSING='false'
+# Terminal 1 - Backend
+cd /Users/jamesricciardi/SlotSync
+./start-backend-for-expo.sh
 
-# Disable embeddings
-export ENABLE_IMAGE_EMBEDDINGS='false'
-
-# Disable GPT-4 Vision
-export ENABLE_GPT4_VISION='false'
+# Terminal 2 - Frontend (in new terminal window)
+cd /Users/jamesricciardi/SlotSync
+npx expo start --clear
 ```
+
+### Daily Use
+```bash
+# Terminal 1
+cd /Users/jamesricciardi/SlotSync
+./start-backend-for-expo.sh
+
+# Terminal 2
+cd /Users/jamesricciardi/SlotSync
+npx expo start --clear
+```
+
+### Stop Everything
+```bash
+# Terminal 1: Press Ctrl+C
+# Terminal 2: Press Ctrl+C
+```
+
+---
+
+## Environment Variables
+
+### Backend (.env in backend-example/)
+- `DISCOGS_PERSONAL_ACCESS_TOKEN` - Your Discogs API token
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Google Vision credentials JSON
+
+### Frontend (.env in root)
+- `EXPO_PUBLIC_API_BASE_URL` - Backend server URL (e.g., `http://192.168.1.215:3000`)
+
+---
+
+## IP Address Configuration
+
+Your backend IP is: **192.168.1.215**
+
+Make sure both files have this IP:
+- `app.json` → `expo.extra.EXPO_PUBLIC_API_BASE_URL`
+- `.env` → `EXPO_PUBLIC_API_BASE_URL`
+
+If your IP changes, update both files and restart Expo with `--clear`.

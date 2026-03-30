@@ -12,9 +12,10 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const crypto = require('crypto');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const GPT_MODEL = process.env.GPT_MODEL || 'gpt-4o';
-const ENABLE_VINYL_VISION = process.env.ENABLE_VINYL_VISION !== 'false';
+const config = require('../config');
+const OPENAI_API_KEY = config.openai.apiKey;
+const GPT_MODEL = config.openai.model;
+const ENABLE_VINYL_VISION = config.openai.enableVinylVision;
 const DB_PATH = path.join(__dirname, '..', 'identified_records.db');
 
 /**

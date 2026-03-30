@@ -10,6 +10,7 @@
 
 const axios = require('axios');
 const musicbrainzService = require('../musicbrainzService');
+const { discogsHttpRequest } = require('../discogsHttpClient');
 
 const MUSICBRAINZ_BASE_URL = 'https://musicbrainz.org/ws/2';
 const COVER_ART_ARCHIVE_BASE_URL = 'https://coverartarchive.org';
@@ -163,9 +164,10 @@ async function fetchCoverArt(mbid) {
  * Search Discogs for additional metadata
  */
 async function searchDiscogs(artist, albumTitle) {
-  const DISCOGS_PERSONAL_ACCESS_TOKEN = process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
-  const DISCOGS_API_KEY = process.env.DISCOGS_API_KEY;
-  const DISCOGS_API_SECRET = process.env.DISCOGS_API_SECRET;
+  const config = require('../../config');
+  const DISCOGS_PERSONAL_ACCESS_TOKEN = config.discogs.personalAccessToken;
+  const DISCOGS_API_KEY = config.discogs.apiKey;
+  const DISCOGS_API_SECRET = config.discogs.apiSecret;
 
   if (!DISCOGS_PERSONAL_ACCESS_TOKEN && !DISCOGS_API_KEY) {
     return null;
@@ -191,13 +193,21 @@ async function searchDiscogs(artist, albumTitle) {
       params.secret = DISCOGS_API_SECRET;
     }
 
-    const response = await axios.get('https://api.discogs.com/database/search', {
-      params,
-      headers,
-      timeout: 5000,
-    });
+    const responseData = await discogsHttpRequest(
+      'https://api.discogs.com/database/search',
+      {
+        params,
+        headers,
+      },
+      {
+        timeoutMs: 5000,
+        reqId: 'N/A',
+        op: 'search',
+        meta: { artist, albumTitle }
+      }
+    );
 
-    const results = response.data.results || [];
+    const results = responseData.results || [];
     if (results.length === 0) {
       return null;
     }
@@ -216,9 +226,10 @@ async function searchDiscogs(artist, albumTitle) {
  * Fetch full Discogs release details
  */
 async function fetchDiscogsRelease(discogsId) {
-  const DISCOGS_PERSONAL_ACCESS_TOKEN = process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
-  const DISCOGS_API_KEY = process.env.DISCOGS_API_KEY;
-  const DISCOGS_API_SECRET = process.env.DISCOGS_API_SECRET;
+  const config = require('../../config');
+  const DISCOGS_PERSONAL_ACCESS_TOKEN = config.discogs.personalAccessToken;
+  const DISCOGS_API_KEY = config.discogs.apiKey;
+  const DISCOGS_API_SECRET = config.discogs.apiSecret;
 
   if (!DISCOGS_PERSONAL_ACCESS_TOKEN && !DISCOGS_API_KEY) {
     return null;
@@ -232,16 +243,24 @@ async function fetchDiscogsRelease(discogsId) {
       headers['Authorization'] = `Discogs token=${DISCOGS_PERSONAL_ACCESS_TOKEN}`;
     }
 
-    const response = await axios.get(`https://api.discogs.com/releases/${discogsId}`, {
-      params: DISCOGS_PERSONAL_ACCESS_TOKEN ? {} : {
-        key: DISCOGS_API_KEY,
-        secret: DISCOGS_API_SECRET,
+    const releaseData = await discogsHttpRequest(
+      `https://api.discogs.com/releases/${discogsId}`,
+      {
+        params: DISCOGS_PERSONAL_ACCESS_TOKEN ? {} : {
+          key: DISCOGS_API_KEY,
+          secret: DISCOGS_API_SECRET,
+        },
+        headers,
       },
-      headers,
-      timeout: 5000,
-    });
+      {
+        timeoutMs: 5000,
+        reqId: 'N/A',
+        op: 'release_fetch',
+        meta: { discogsId }
+      }
+    );
 
-    return response.data;
+    return releaseData;
   } catch (error) {
     console.warn(`[UnifiedResolver] ⚠️  Discogs release fetch failed: ${error.message}`);
     return null;

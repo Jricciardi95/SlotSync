@@ -11,7 +11,7 @@
 cd /Users/jamesricciardi/SlotSync/backend-example
 
 # Set Discogs API token
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 
 # Set Google Vision credentials (REPLACE with your actual path)
 export GOOGLE_APPLICATION_CREDENTIALS='/path/to/your/google-credentials.json'
@@ -269,7 +269,7 @@ npx expo start --clear
 
 ### ✅ Terminal 1 (Backend)
 - [ ] `cd /Users/jamesricciardi/SlotSync/backend-example`
-- [ ] `export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'`
+- [ ] `export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'`
 - [ ] `export GOOGLE_APPLICATION_CREDENTIALS='/path/to/credentials.json'`
 - [ ] `export CONFIDENCE_THRESHOLD='0.5'`
 - [ ] `npm start`
@@ -293,7 +293,7 @@ npx expo start --clear
 
 ### Terminal 1: Backend
 ```bash
-cd /Users/jamesricciardi/SlotSync/backend-example && export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK' && export GOOGLE_APPLICATION_CREDENTIALS='/path/to/your/google-credentials.json' && export CONFIDENCE_THRESHOLD='0.5' && npm start
+cd /Users/jamesricciardi/SlotSync/backend-example && export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here' && export GOOGLE_APPLICATION_CREDENTIALS='/path/to/your/google-credentials.json' && export CONFIDENCE_THRESHOLD='0.5' && npm start
 ```
 
 ### Terminal 2: Frontend

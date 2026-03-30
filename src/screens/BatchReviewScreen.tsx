@@ -325,15 +325,23 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         photo.originalUri
       );
       
-      const newRecord = await createRecord({
+      // PR3: createRecord now returns { record, isNew } and handles duplicates
+      const { record: newRecord, isNew } = await createRecord({
         title: currentMatch.title,
         artist: currentMatch.artist,
         year: currentMatch.year ?? null,
         coverImageRemoteUrl: imageFields.coverImageRemoteUrl,
         coverImageLocalUri: imageFields.coverImageLocalUri,
+        discogsId: currentMatch.discogsId ? String(currentMatch.discogsId) : null,
       });
 
-      // Save tracks if available
+      // PR3: Only save tracks if this is a new record
+      if (!isNew) {
+        // Record already exists - skip track creation
+        return;
+      }
+
+      // Save tracks if available (only for new records)
       if (currentMatch.tracks && currentMatch.tracks.length > 0) {
         for (const track of currentMatch.tracks) {
           try {

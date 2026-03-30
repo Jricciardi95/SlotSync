@@ -7,8 +7,10 @@
 
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const { embeddingCache } = require('./embeddingCache');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../identified_records.db');
+const config = require('../config');
+const DB_PATH = config.database.path;
 
 /**
  * Get database connection
@@ -102,7 +104,16 @@ async function searchSimilarAlbums(queryEmbedding, threshold = 0.85, limit = 10)
 
           for (const row of rows) {
             try {
-              const storedEmbedding = JSON.parse(row.embedding);
+              // Create cache key from album info
+              const cacheKey = `${row.artist}::${row.title}::${row.year || ''}`;
+              
+              // Check cache first, then parse and cache
+              let storedEmbedding = embeddingCache.get(cacheKey);
+              if (!storedEmbedding) {
+                storedEmbedding = JSON.parse(row.embedding);
+                embeddingCache.set(cacheKey, storedEmbedding);
+              }
+              
               const similarity = cosineSimilarity(queryEmbedding, storedEmbedding);
 
               if (similarity >= threshold) {
@@ -158,7 +169,16 @@ async function getEmbedding(artist, title, year = null) {
           reject(err);
         } else if (row) {
           try {
-            const embedding = JSON.parse(row.embedding);
+            // Create cache key from album info
+            const cacheKey = `${artist}::${title}::${year || ''}`;
+            
+            // Check cache first, then parse and cache
+            let embedding = embeddingCache.get(cacheKey);
+            if (!embedding) {
+              embedding = JSON.parse(row.embedding);
+              embeddingCache.set(cacheKey, embedding);
+            }
+            
             resolve(embedding);
           } catch (parseError) {
             reject(parseError);

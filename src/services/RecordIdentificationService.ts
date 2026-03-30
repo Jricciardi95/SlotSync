@@ -13,6 +13,7 @@ import { identifyAlbumFromImage } from './identification/orchestrator';
 import { saveResolvedAlbum } from './db';
 import { generateImageHash } from '../utils/imageHash';
 import { ResolvedAlbum } from './metadata/types';
+import { logger } from '../utils/logger';
 
 export type TrackInfo = {
   title: string;
@@ -31,6 +32,9 @@ export type IdentificationMatch = {
   tracks?: TrackInfo[];
   confidence?: number;
   source?: string;
+  genre?: string[];
+  style?: string[];
+  format?: string[];
 };
 
 export type IdentifiedAlbum = IdentificationMatch;
@@ -65,7 +69,7 @@ function looksLikeRealAlbumTitle(candidate: IdentificationMatch): boolean {
   if (!candidate.title || candidate.title.length < 2) return false;
   if (!candidate.artist) return false; // Must have artist
 
-  const artist = (candidate.artist || '').trim().toLowerCase();
+  const artist = candidate.artist.trim().toLowerCase();
   const title = candidate.title.trim().toLowerCase();
   const combined = `${artist} ${title}`;
 
@@ -135,7 +139,7 @@ export const identifyRecordByBarcode = async (
   for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = getRetryDelay(attempt - 1);
-      console.log(`[RecordIdentification] Barcode retry attempt ${attempt}/${RETRY_CONFIG.maxRetries} after ${delay}ms...`);
+      logger.debug(`[RecordIdentification] Barcode retry attempt ${attempt}/${RETRY_CONFIG.maxRetries} after ${delay}ms...`);
       
       if (abortSignal?.aborted) {
         throw {
@@ -160,25 +164,25 @@ export const identifyRecordByBarcode = async (
       const apiUrl = getApiUrl(API_CONFIG.ENDPOINTS.IDENTIFY_RECORD);
       
       // CRITICAL: Log the exact URL being called
-      console.log(`[RecordIdentification] ========================================`);
-      console.log(`[RecordIdentification] 🚀 CALLING API WITH BARCODE (attempt ${attempt + 1})`);
-      console.log(`[RecordIdentification] 📍 Full URL: ${apiUrl}`);
-      console.log(`[RecordIdentification] 📍 Base URL: ${API_CONFIG.BASE_URL}`);
-      console.log(`[RecordIdentification] 📍 Barcode: ${barcode}`);
-      console.log(`[RecordIdentification] ⏱️  Timeout: ${API_CONFIG.TIMEOUT}ms (90 seconds)`);
+      logger.debug(`[RecordIdentification] ========================================`);
+      logger.debug(`[RecordIdentification] 🚀 CALLING API WITH BARCODE (attempt ${attempt + 1})`);
+      logger.debug(`[RecordIdentification] 📍 Full URL: ${apiUrl}`);
+      logger.debug(`[RecordIdentification] 📍 Base URL: ${API_CONFIG.BASE_URL}`);
+      logger.debug(`[RecordIdentification] 📍 Barcode: ${barcode}`);
+      logger.debug(`[RecordIdentification] ⏱️  Timeout: ${API_CONFIG.TIMEOUT}ms (90 seconds)`);
       
       // Validate URL doesn't contain localhost (won't work on physical devices)
       if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-        console.error(`[RecordIdentification] ❌ ERROR: URL contains localhost/127.0.0.1!`);
-        console.error(`[RecordIdentification] ❌ This will NOT work on physical devices!`);
-        console.error(`[RecordIdentification] ❌ Set EXPO_PUBLIC_API_BASE_URL to your computer's LAN IP`);
+        logger.error(`[RecordIdentification] ❌ ERROR: URL contains localhost/127.0.0.1!`);
+        logger.error(`[RecordIdentification] ❌ This will NOT work on physical devices!`);
+        logger.error(`[RecordIdentification] ❌ Set EXPO_PUBLIC_API_BASE_URL to your computer's LAN IP`);
         throw {
           code: 'NETWORK_ERROR' as const,
           message: 'API URL contains localhost. Physical devices cannot reach localhost. Set EXPO_PUBLIC_API_BASE_URL to your computer\'s LAN IP address (e.g., http://192.168.1.100:3000)',
         } as IdentificationError;
       }
       
-      console.log(`[RecordIdentification] ========================================`);
+      logger.debug(`[RecordIdentification] ========================================`);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -236,7 +240,7 @@ export const identifyRecordByBarcode = async (
         } as IdentificationError;
       }
 
-      console.log(`[RecordIdentification] ✅ Barcode success on attempt ${attempt + 1}`);
+      logger.debug(`[RecordIdentification] ✅ Barcode success on attempt ${attempt + 1}`);
       return data as IdentificationResponse;
     } catch (error: any) {
       if (timeoutId) {
@@ -333,8 +337,8 @@ export const identifyRecordByBarcode = async (
 export const testApiConnectivity = async (): Promise<boolean> => {
   try {
     const pingUrl = getApiUrl(API_CONFIG.ENDPOINTS.PING || '/api/ping');
-    console.log(`[RecordIdentification] 🔍 Testing connectivity to: ${pingUrl}`);
-    console.log(`[RecordIdentification] 🔍 Base URL: ${API_CONFIG.BASE_URL}`);
+    logger.debug(`[RecordIdentification] 🔍 Testing connectivity to: ${pingUrl}`);
+    logger.debug(`[RecordIdentification] 🔍 Base URL: ${API_CONFIG.BASE_URL}`);
     
     // Use AbortController for timeout (AbortSignal.timeout is not available in React Native)
     const controller = new AbortController();
@@ -349,24 +353,24 @@ export const testApiConnectivity = async (): Promise<boolean> => {
     
     if (response.ok) {
       const data = await response.json();
-      console.log(`[RecordIdentification] ✅ Connectivity test passed:`, data);
+      logger.debug(`[RecordIdentification] ✅ Connectivity test passed:`, data);
       return true;
     } else {
-      console.warn(`[RecordIdentification] ⚠️  Connectivity test failed: HTTP ${response.status}`);
+      logger.warn(`[RecordIdentification] ⚠️  Connectivity test failed: HTTP ${response.status}`);
       return false;
     }
   } catch (error: any) {
     // Clear timeout if it was set
     if (error.name === 'AbortError') {
-      console.error(`[RecordIdentification] ❌ Connectivity test timed out after 5 seconds`);
+      logger.error(`[RecordIdentification] ❌ Connectivity test timed out after 5 seconds`);
     } else {
-      console.error(`[RecordIdentification] ❌ Connectivity test failed:`, error.message);
+      logger.error(`[RecordIdentification] ❌ Connectivity test failed:`, error.message);
     }
-    console.error(`[RecordIdentification] ❌ This usually means the backend is unreachable at ${API_CONFIG.BASE_URL}`);
-    console.error(`[RecordIdentification] ❌ Check that:`);
-    console.error(`[RecordIdentification]    1. Backend server is running (node server-hybrid.js)`);
-    console.error(`[RecordIdentification]    2. EXPO_PUBLIC_API_BASE_URL is set correctly`);
-    console.error(`[RecordIdentification]    3. Device and computer are on the same Wi-Fi network`);
+    logger.error(`[RecordIdentification] ❌ This usually means the backend is unreachable at ${API_CONFIG.BASE_URL}`);
+    logger.error(`[RecordIdentification] ❌ Check that:`);
+    logger.error(`[RecordIdentification]    1. Backend server is running (node server-hybrid.js)`);
+    logger.error(`[RecordIdentification]    2. EXPO_PUBLIC_API_BASE_URL is set correctly`);
+    logger.error(`[RecordIdentification]    3. Device and computer are on the same Wi-Fi network`);
     return false;
   }
 };
@@ -417,7 +421,7 @@ export const identifyRecord = async (
         artist: result.album.artist,
         title: result.album.albumTitle,
         year: result.album.releaseYear,
-        genre: result.album.genre,
+        genre: result.album.genre ? [result.album.genre] : undefined,
         coverImageRemoteUrl: result.album.coverHdUrl,
         discogsId: result.album.discogsId,
         tracks: result.album.tracks.map(t => ({
@@ -431,12 +435,14 @@ export const identifyRecord = async (
         source: result.fromCache ? 'cache' : 'api',
       },
       alternates: [],
-      candidates: result.sourceCandidates.map(c => ({
-        artist: c.artist,
-        title: c.album,
-        confidence: c.confidence,
-        source: c.source,
-      })),
+      candidates: result.sourceCandidates
+        .filter(c => c.artist && c.album)
+        .map(c => ({
+          artist: c.artist!,
+          title: c.album!,
+          confidence: c.confidence,
+          source: c.source,
+        })),
     };
 
     // CRITICAL: DO NOT automatically save records to library
@@ -497,7 +503,7 @@ export const identifyRecordByText = async (
   for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = getRetryDelay(attempt - 1);
-      console.log(`[RecordIdentification] Text lookup retry attempt ${attempt}/${RETRY_CONFIG.maxRetries} after ${delay}ms...`);
+      logger.debug(`[RecordIdentification] Text lookup retry attempt ${attempt}/${RETRY_CONFIG.maxRetries} after ${delay}ms...`);
       
       if (abortSignal?.aborted) {
         throw {
@@ -519,9 +525,11 @@ export const identifyRecordByText = async (
         abortSignal.addEventListener('abort', () => controller.abort());
       }
 
-      const apiUrl = getApiUrl(API_CONFIG.ENDPOINTS.IDENTIFY_RECORD);
+      // Use dedicated text lookup endpoint (NOT image endpoint)
+      const apiUrl = getApiUrl('/api/identify-by-text');
       
-      console.log(`[RecordIdentification] Looking up by text: "${artist}" - "${title}"`);
+      logger.debug(`[RecordIdentification] Looking up by text: "${artist}" - "${title}"`);
+      logger.debug(`[RecordIdentification] Using endpoint: ${apiUrl}`);
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -579,7 +587,7 @@ export const identifyRecordByText = async (
         } as IdentificationError;
       }
 
-      console.log(`[RecordIdentification] ✅ Text lookup success on attempt ${attempt + 1}`);
+      logger.debug(`[RecordIdentification] ✅ Text lookup success on attempt ${attempt + 1}`);
       return data as IdentificationResponse;
     } catch (error: any) {
       if (timeoutId) {

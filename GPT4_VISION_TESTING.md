@@ -13,7 +13,7 @@ export ENABLE_GPT4_VISION='true'
 
 ```bash
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export OPENAI_API_KEY='sk-your-key-here'
 export ENABLE_GPT4_VISION='true'
@@ -71,7 +71,7 @@ Use an album cover with stylized fonts or low contrast that OCR can't read:
 1. **Start backend** (Terminal 1):
 ```bash
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export OPENAI_API_KEY='sk-your-key-here'
 export ENABLE_GPT4_VISION='true'

@@ -20,7 +20,7 @@ This will install `expo-image-manipulator` which is required for image resizing.
 cd /Users/jamesricciardi/SlotSync/backend-example
 
 # Set environment variables
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 
 # Optional: Set confidence threshold (default: 0.6)
@@ -215,7 +215,7 @@ npm install
 **Terminal 1 (Backend):**
 ```bash
 cd /Users/jamesricciardi/SlotSync/backend-example
-export DISCOGS_PERSONAL_ACCESS_TOKEN='gOQSOxYBRENZutcnwOQnAaYMxmePxboOxBfyAeHK'
+export DISCOGS_PERSONAL_ACCESS_TOKEN='your_discogs_token_here'
 export ENABLE_GOOGLE_VISION='true'
 export CONFIDENCE_THRESHOLD=0.6
 npm start

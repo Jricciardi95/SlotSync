@@ -23,7 +23,7 @@ import { useTheme } from '../hooks/useTheme';
 import { LibraryStackParamList } from '../navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useBatchScan, PendingPhoto } from '../contexts/BatchScanContext';
-import { createRecord } from '../data/repository';
+import { importCsvRowsWithEnrichment, CsvRow } from '../utils/csvImport';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'BatchScan'>;
 
@@ -216,38 +216,56 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      let imported = 0;
-      let skipped = 0;
-
+      // Parse rows into CsvRow format
+      const csvRows: CsvRow[] = [];
       for (const row of dataRows) {
         if (row.length <= Math.max(artistIdx, titleIdx)) {
-          skipped += 1;
-          continue;
+          continue; // Skip invalid rows
         }
 
-        const artist = row[artistIdx]?.trim();
-        const title = row[titleIdx]?.trim();
+        const artist = row[artistIdx]?.trim() || '';
+        const title = row[titleIdx]?.trim() || '';
 
         if (!artist || !title) {
-          skipped += 1;
-          continue;
+          continue; // Skip rows without artist/title
         }
 
-        try {
-          const year = yearIdx >= 0 ? parseInt(row[yearIdx] || '0', 10) : null;
-          const notes = notesIdx >= 0 ? row[notesIdx]?.trim() : null;
+        // Parse year from CSV - reject 2025
+        let year: number | null = null;
+        if (yearIdx >= 0 && row[yearIdx]) {
+          const yearStr = row[yearIdx].trim();
+          const parsedYear = parseInt(yearStr, 10);
+          const currentYear = new Date().getFullYear();
+          if (!isNaN(parsedYear) && parsedYear >= 1900 && parsedYear <= currentYear + 1 && parsedYear !== 2025) {
+            year = parsedYear;
+          }
+        }
 
-          await createRecord({
-            title,
-            artist,
-            year: year && !isNaN(year) && year > 1900 && year < 2100 ? year : null,
-            notes: notes || null,
-          });
+        const notes = notesIdx >= 0 ? row[notesIdx]?.trim() : null;
 
-          imported += 1;
-        } catch (error) {
-          console.error('Failed to import record', error);
-          skipped += 1;
+        csvRows.push({
+          artist,
+          title,
+          year,
+          notes,
+          releaseId: null, // BatchScan doesn't support releaseId column
+        });
+      }
+
+      // Import rows with concurrency and retry
+      const importResult = await importCsvRowsWithEnrichment(csvRows, {
+        concurrency: 4,
+        maxRetries: 2,
+      });
+
+      const imported = importResult.imported;
+      const skipped = importResult.skipped;
+
+      // Log failures for debugging
+      if (importResult.failures.length > 0) {
+        console.warn(`[BatchScan CSV] ⚠️  ${importResult.failures.length} rows failed:`);
+        for (const failure of importResult.failures) {
+          console.warn(`[BatchScan CSV]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
         }
       }
 
@@ -364,7 +382,7 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
         {/* Camera Preview - Square */}
         <View style={styles.cameraContainer}>
           <CameraView
-            ref={cameraRef}
+            ref={cameraRef as any}
             style={styles.camera}
             facing="back"
             onCameraReady={() => setScanning(true)}

@@ -258,6 +258,8 @@ export async function getDiscogsRelease(discogsId: number): Promise<{
   format?: string[];
   genre?: string[];
   style?: string[];
+  label?: string;
+  catalogNumber?: string;
 } | null> {
   try {
     const apiUrl = getApiUrl(`/api/discogs/release/${discogsId}`);
