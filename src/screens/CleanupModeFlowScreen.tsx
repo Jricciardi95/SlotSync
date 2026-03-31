@@ -86,17 +86,15 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
     const lightSlots = async () => {
       setLighting(true);
       try {
-        await Promise.all(
-          currentItem.location!.slotNumbers.map((slot) =>
-            setSlotLight({
-              ipAddress: currentItem.unitIpAddress!,
-              slot,
-              color: '#3C4E63',
-              brightness: 0.8,
-              effect: 'slow_pulse',
-            })
-          )
-        );
+        const slots = currentItem.location!.slotNumbers;
+        await setSlotLight({
+          ipAddress: currentItem.unitIpAddress!,
+          slot: slots[0],
+          allSlots: slots,
+          color: '#3C4E63',
+          brightness: 0.8,
+          effect: 'slow_pulse',
+        });
       } catch {
         // Error handled in client
       } finally {
@@ -108,12 +106,7 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
 
     return () => {
       if (currentItem?.location && currentItem?.unitIpAddress) {
-        currentItem.location.slotNumbers.forEach((slot) => {
-          clearSlotLight({
-            ipAddress: currentItem.unitIpAddress!,
-            slot,
-          }).catch(() => {});
-        });
+        clearSlotLight({ ipAddress: currentItem.unitIpAddress!, slot: 1 }).catch(() => {});
       }
     };
   }, [currentItem]);
@@ -124,14 +117,10 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
     try {
       // Clear LEDs
       if (currentItem.location && currentItem.unitIpAddress) {
-        await Promise.all(
-          currentItem.location.slotNumbers.map((slot) =>
-            clearSlotLight({
-              ipAddress: currentItem.unitIpAddress!,
-              slot,
-            })
-          )
-        );
+        await clearSlotLight({
+          ipAddress: currentItem.unitIpAddress!,
+          slot: 1,
+        });
       }
 
       // Mark as returned
@@ -139,26 +128,20 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
 
       // Flash cyan briefly to indicate completion
       if (currentItem.location && currentItem.unitIpAddress) {
-        await Promise.all(
-          currentItem.location.slotNumbers.map((slot) =>
-            setSlotLight({
-              ipAddress: currentItem.unitIpAddress!,
-              slot,
-              color: '#08F7FE',
-              brightness: 1.0,
-              effect: 'steady',
-            })
-          )
-        );
+        const slots = currentItem.location.slotNumbers;
+        await setSlotLight({
+          ipAddress: currentItem.unitIpAddress!,
+          slot: slots[0],
+          allSlots: slots,
+          color: '#08F7FE',
+          brightness: 1.0,
+          effect: 'steady',
+        });
         await new Promise((resolve) => setTimeout(resolve, 150));
-        await Promise.all(
-          currentItem.location.slotNumbers.map((slot) =>
-            clearSlotLight({
-              ipAddress: currentItem.unitIpAddress!,
-              slot,
-            })
-          )
-        );
+        await clearSlotLight({
+          ipAddress: currentItem.unitIpAddress!,
+          slot: 1,
+        });
       }
 
       // Move to next
@@ -184,14 +167,10 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
 
   const handleCancel = async () => {
     if (currentItem?.location && currentItem?.unitIpAddress) {
-      await Promise.all(
-        currentItem.location.slotNumbers.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentItem.unitIpAddress!,
-            slot,
-          })
-        )
-      );
+      await clearSlotLight({
+        ipAddress: currentItem.unitIpAddress!,
+        slot: 1,
+      });
     }
     navigation.goBack();
   };

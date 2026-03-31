@@ -22,7 +22,7 @@ export interface UseCameraCaptureReturn {
   requestPermission: ReturnType<typeof useCameraPermissions>[1];
   
   // Refs (exposed for parent component)
-  cameraRef: React.RefObject<CameraView>;
+  cameraRef: React.RefObject<CameraView | null>;
   
   // Actions
   capturePhoto: () => Promise<string | null>;

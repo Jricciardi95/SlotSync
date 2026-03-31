@@ -9,4 +9,5 @@ export const colors = {
   textMuted: 'rgba(248, 248, 248, 0.5)',
   borderSubtle: 'rgba(248, 248, 248, 0.12)',
   accentMuted: 'rgba(8, 247, 254, 0.25)',
+  error: '#FF6B6B',
 };

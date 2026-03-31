@@ -222,10 +222,6 @@ async function callBackendIdentification(
       message: 'Invalid response format from backend',
       originalError: data,
     } as IdentificationError;
-    
-    debug.log('IDENTIFICATION', `✅ Backend identified: "${album.artist}" - "${album.albumTitle}" (confidence: ${album.confidence.toFixed(3)})`);
-    
-    return album;
   } catch (error: any) {
     clearTimeout(timeoutId);
     

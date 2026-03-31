@@ -1,22 +1,48 @@
+/**
+ * High-level shelf lighting API used by screens (Load/Cleanup modes, Record detail, etc.).
+ * Talks to ESP32 firmware via GET routes in src/services/shelfApi.
+ *
+ * Base URL resolution:
+ * 1) Settings → persisted shelf URL (AsyncStorage)
+ * 2) EXPO_PUBLIC_SHELF_BASE_URL
+ * 3) Legacy: `ipAddress` from Unit record (http://that-ip)
+ */
+
 import { Alert } from 'react-native';
+import {
+  shelfBlinkSlot,
+  shelfClear,
+  shelfDemo,
+  shelfGetStatus,
+  shelfIdle,
+  shelfSelectSlot,
+  shelfSelectSlots,
+  shelfSetBrightness,
+} from './shelfApi/shelfApi';
+import { ShelfApiError, ShelfNotConfiguredError } from './shelfApi/types';
+import { logger } from '../utils/logger';
 
-type SlotEffect = 'steady' | 'slow_pulse' | 'color_wave';
+export type SlotEffect = 'steady' | 'slow_pulse' | 'color_wave';
 
-type SlotLightParams = {
+export type SlotLightParams = {
+  /** Legacy per-unit IP; used only if no global shelf URL is configured */
   ipAddress: string;
   slot: number;
+  /** All physical slots to highlight in one firmware request (recommended). */
+  allSlots?: number[];
   totalSlots?: number;
   color?: string;
   brightness?: number;
   effect?: SlotEffect;
 };
 
-type ClearSlotParams = {
+export type ClearSlotParams = {
   ipAddress: string;
-  slot: number;
+  /** Ignored by firmware MVP (whole strip clear); kept for call-site compatibility */
+  slot?: number;
 };
 
-type GlobalLightingParams = {
+export type GlobalLightingParams = {
   ipAddress: string;
   mode: 'music' | 'idle' | 'off';
   palette?: string[];
@@ -24,32 +50,6 @@ type GlobalLightingParams = {
   brightness?: number;
   sensitivity?: number;
   effect?: SlotEffect;
-};
-
-const request = async (
-  url: string,
-  payload: Record<string, unknown>
-): Promise<void> => {
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-  } catch (error) {
-    console.warn('Shelf lighting request failed', error);
-    Alert.alert(
-      'Lighting command failed',
-      'Please check the unit connection and try again.'
-    );
-    throw error;
-  }
 };
 
 const validateSlot = (slot: number, totalSlots?: number) => {
@@ -61,47 +61,109 @@ const validateSlot = (slot: number, totalSlots?: number) => {
   }
 };
 
-export const setSlotLight = async ({
-  ipAddress,
-  slot,
-  totalSlots,
-  color = '#FFFFFF',
-  brightness = 0.9,
-  effect = 'steady',
-}: SlotLightParams): Promise<void> => {
-  validateSlot(slot, totalSlots);
-  await request(`http://${ipAddress}/led/slot`, {
+function alertLightingError(error: unknown, showAlert: boolean) {
+  const msg =
+    error instanceof ShelfNotConfiguredError
+      ? error.message
+      : error instanceof ShelfApiError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+  logger.warn('[ShelfLighting]', msg);
+  if (showAlert) {
+    Alert.alert('Shelf lighting', msg);
+  }
+}
+
+/**
+ * Highlight one or more slots (dim shelf + bright selection on firmware).
+ */
+export const setSlotLight = async (
+  {
+    ipAddress,
     slot,
-    color,
-    brightness,
-    effect,
-  });
+    allSlots,
+    totalSlots,
+  }: SlotLightParams,
+  options?: { silent?: boolean }
+): Promise<void> => {
+  const slots = allSlots?.length ? [...new Set(allSlots)].sort((a, b) => a - b) : [slot];
+  slots.forEach((s) => validateSlot(s, totalSlots));
+  const primary = slot;
+  validateSlot(primary, totalSlots);
+
+  try {
+    if (slots.length > 1) {
+      await shelfSelectSlots(slots, ipAddress);
+    } else {
+      await shelfSelectSlot(primary, ipAddress);
+    }
+  } catch (error) {
+    alertLightingError(error, !options?.silent);
+    throw error;
+  }
 };
 
-export const clearSlotLight = async ({
-  ipAddress,
-  slot,
-}: ClearSlotParams): Promise<void> => {
-  validateSlot(slot);
-  await request(`http://${ipAddress}/led/slot/clear`, { slot });
+/**
+ * Turn shelf off (firmware clears entire strip — no per-slot clear on ESP32 MVP).
+ */
+export const clearSlotLight = async (
+  { ipAddress }: ClearSlotParams,
+  options?: { silent?: boolean }
+): Promise<void> => {
+  try {
+    await shelfClear(ipAddress);
+  } catch (error) {
+    alertLightingError(error, !options?.silent);
+    throw error;
+  }
 };
 
+/**
+ * Global modes — mapped to firmware where possible.
+ */
 export const setGlobalLighting = async ({
   ipAddress,
   mode,
-  palette,
-  color,
-  brightness,
-  sensitivity,
-  effect,
 }: GlobalLightingParams): Promise<void> => {
-  await request(`http://${ipAddress}/led/global`, {
-    mode,
-    palette,
-    color,
-    brightness,
-    sensitivity,
-    effect,
-  });
+  try {
+    if (mode === 'idle') {
+      await shelfIdle(ipAddress);
+      return;
+    }
+    if (mode === 'off') {
+      await shelfClear(ipAddress);
+      return;
+    }
+    // music — firmware uses separate flag; MVP: demo as “active” visual
+    await shelfDemo(ipAddress);
+  } catch (error) {
+    alertLightingError(error, true);
+    throw error;
+  }
 };
 
+/** Fire-and-forget highlight when opening an album (no alert on failure). */
+export const highlightAlbumSlots = async (
+  slotNumbers: number[],
+  unitIpAddress?: string | null
+): Promise<void> => {
+  if (!slotNumbers.length) return;
+  const sorted = [...new Set(slotNumbers)].filter((n) => n >= 1).sort((a, b) => a - b);
+  if (!sorted.length) return;
+  try {
+    await setSlotLight(
+      {
+        ipAddress: unitIpAddress ?? '',
+        slot: sorted[0],
+        allSlots: sorted,
+      },
+      { silent: true }
+    );
+  } catch {
+    /* logged in setSlotLight */
+  }
+};
+
+export { shelfGetStatus, shelfIdle, shelfClear, shelfDemo, shelfBlinkSlot, shelfSetBrightness };

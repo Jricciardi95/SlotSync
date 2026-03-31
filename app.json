@@ -14,9 +14,16 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.SlotSync"
+      "bundleIdentifier": "com.anonymous.SlotSync",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "SlotSync finds and controls your smart shelf on your local Wi‑Fi network."
+      }
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -42,7 +49,8 @@
       ]
     ],
     "extra": {
-      "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.165:3000"
+      "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.165:3000",
+      "EXPO_PUBLIC_SHELF_BASE_URL": ""
     }
   }
 }

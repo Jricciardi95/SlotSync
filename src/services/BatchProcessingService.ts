@@ -5,9 +5,8 @@ import {
   updateBatchPhoto,
   updateBatchJobStatus,
   getActiveBatchJobs,
-  BatchJob,
-  BatchPhoto,
 } from '../data/repository';
+import type { BatchJob, BatchPhoto } from '../data/types';
 import { 
   identifyRecord, 
   IdentificationMatch,
@@ -104,10 +103,8 @@ class BatchProcessingService {
         
         // Store result as JSON (include both normalized structure and original fields for compatibility)
         const resultData = JSON.stringify({
-          // Normalized structure (current + alternates)
           current: normalizedResult.current,
-          alternates: normalizedResult.alternates,
-          // Original structure (for backward compatibility)
+          scanAlternates: normalizedResult.alternates,
           bestMatch: response.bestMatch,
           alternates: response.alternates,
           confidence: response.confidence,
@@ -238,16 +235,13 @@ class BatchProcessingService {
             // Store candidates as suggestions (user can review later)
             // Use same structure as successful identification for consistency
             const resultData = JSON.stringify({
-              // Normalized structure (current + alternates)
               current: normalizedResult.current,
-              alternates: normalizedResult.alternates,
-              // Original structure (for backward compatibility)
+              scanAlternates: normalizedResult.alternates,
               bestMatch: validCandidates[0],
               alternates: validCandidates.slice(1),
-              confidence: validCandidates[0].confidence || 0.5, // Use actual confidence from suggestion
+              confidence: validCandidates[0].confidence || 0.5,
               isSuggestion: true,
               extractedText: error.extractedText,
-              // Store albumSuggestions metadata for reference
               albumSuggestions: albumSuggestions.length > 0 ? albumSuggestions : undefined,
             });
             await updateBatchPhoto(photo.id, 'success', resultData);

@@ -30,7 +30,7 @@ import {
   getSlotAssignmentByRecord,
 } from '../data/repository';
 import { Unit, SlotWithAssignment, RecordModel } from '../data/types';
-import { lightSlotHighlight, lightSlotOff } from '../utils/ledControl';
+import { setSlotLight, clearSlotLight } from '../services/ShelfLightingClient';
 import { logger } from '../utils/logger';
 import { getRecordById } from '../data/repository';
 
@@ -85,7 +85,16 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
               // PR7: Emit LED highlight for assigned slot
               const slot = slotsData.find((s) => s.id === assignment.slotId);
               if (slot) {
-                lightSlotHighlight(unitId, assignment.slotId, slot.slotNumber);
+                const allNums = slotsData.map((s) => s.slotNumber);
+                void setSlotLight(
+                  {
+                    ipAddress: unitData.ipAddress,
+                    slot: slot.slotNumber,
+                    allSlots: allNums,
+                    totalSlots: unitData.totalSlots,
+                  },
+                  { silent: true }
+                ).catch(() => {});
               }
             }
           }
@@ -115,7 +124,7 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
           [
             {
               text: 'Go to Library',
-              onPress: () => navigation.navigate('Library'),
+              onPress: () => navigation.navigate('LibraryHome'),
             },
             { text: 'Cancel', style: 'cancel' },
           ]
@@ -128,7 +137,9 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
         try {
           setAssigning(true);
           await unassignRecordFromSlot(selectedRecord.id);
-          lightSlotOff(unitId, slot.id, slot.slotNumber);
+          if (unit?.ipAddress?.trim()) {
+            void clearSlotLight({ ipAddress: unit.ipAddress }, { silent: true }).catch(() => {});
+          }
           
           // Reload slots
           const updatedSlots = await getSlotsWithAssignments(unitId);
@@ -162,7 +173,18 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
                 try {
                   setAssigning(true);
                   await assignRecordToSlot(selectedRecord.id, slot.id);
-                  lightSlotHighlight(unitId, slot.id, slot.slotNumber);
+                  if (unit?.ipAddress?.trim()) {
+                    const allNums = slots.map((s) => s.slotNumber);
+                    void setSlotLight(
+                      {
+                        ipAddress: unit.ipAddress,
+                        slot: slot.slotNumber,
+                        allSlots: allNums,
+                        totalSlots: unit.totalSlots,
+                      },
+                      { silent: true }
+                    ).catch(() => {});
+                  }
                   
                   // Reload slots
                   const updatedSlots = await getSlotsWithAssignments(unitId);
@@ -190,7 +212,18 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
       try {
         setAssigning(true);
         await assignRecordToSlot(selectedRecord.id, slot.id);
-        lightSlotHighlight(unitId, slot.id, slot.slotNumber);
+        if (unit?.ipAddress?.trim()) {
+          const allNums = slots.map((s) => s.slotNumber);
+          void setSlotLight(
+            {
+              ipAddress: unit.ipAddress,
+              slot: slot.slotNumber,
+              allSlots: allNums,
+              totalSlots: unit.totalSlots,
+            },
+            { silent: true }
+          ).catch(() => {});
+        }
         
         // Reload slots
         const updatedSlots = await getSlotsWithAssignments(unitId);
@@ -208,7 +241,7 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
         setAssigning(false);
       }
     },
-    [selectedRecord, unitId, assigning, navigation]
+    [selectedRecord, unit, slots, assigning, navigation]
   );
 
   if (loading) {
@@ -272,7 +305,7 @@ export const VirtualShelfScreen: React.FC<Props> = ({ route, navigation }) => {
             </AppText>
             <AppButton
               title="Select from Library"
-              onPress={() => navigation.navigate('Library')}
+              onPress={() => navigation.navigate('LibraryHome')}
             />
           </AppCard>
         )}

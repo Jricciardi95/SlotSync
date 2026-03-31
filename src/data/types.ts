@@ -56,6 +56,7 @@ export type ImageHash = {
 
 export type SlotSyncRecord = RecordModel;
 
+/** Where a record lives on a physical unit; `slotNumbers` map to ESP32 shelf indices (see shelfApi). */
 export type RecordLocation = {
   id: string;
   recordId: string;

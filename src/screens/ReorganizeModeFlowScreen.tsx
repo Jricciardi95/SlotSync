@@ -142,31 +142,21 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
     const lightSlots = async () => {
       setLighting(true);
       try {
-        // Light group A in cyan
-        await Promise.all(
-          currentSwap.groupA.physicalSlots.map((slot) =>
-            setSlotLight({
-              ipAddress: currentSwap.groupA.unitIpAddress,
-              slot,
-              color: '#08F7FE',
-              brightness: 0.9,
-              effect: 'steady',
-            })
-          )
-        );
-
-        // Light group B in a lighter cyan variant
-        await Promise.all(
-          currentSwap.groupB.physicalSlots.map((slot) =>
-            setSlotLight({
-              ipAddress: currentSwap.groupB.unitIpAddress,
-              slot,
-              color: '#4EC9E0',
-              brightness: 0.9,
-              effect: 'steady',
-            })
-          )
-        );
+        // Firmware MVP: one highlight color for all selected slots (both groups).
+        const combined = [
+          ...new Set([
+            ...currentSwap.groupA.physicalSlots,
+            ...currentSwap.groupB.physicalSlots,
+          ]),
+        ].sort((a, b) => a - b);
+        await setSlotLight({
+          ipAddress: currentSwap.groupA.unitIpAddress,
+          slot: combined[0],
+          allSlots: combined,
+          color: '#08F7FE',
+          brightness: 0.9,
+          effect: 'steady',
+        });
       } catch {
         // Error handled in client
       } finally {
@@ -179,18 +169,10 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
     return () => {
       // Clear lights when component unmounts or swap changes
       if (currentSwap) {
-        currentSwap.groupA.physicalSlots.forEach((slot) => {
-          clearSlotLight({
-            ipAddress: currentSwap.groupA.unitIpAddress,
-            slot,
-          }).catch(() => {});
-        });
-        currentSwap.groupB.physicalSlots.forEach((slot) => {
-          clearSlotLight({
-            ipAddress: currentSwap.groupB.unitIpAddress,
-            slot,
-          }).catch(() => {});
-        });
+        clearSlotLight({
+          ipAddress: currentSwap.groupA.unitIpAddress,
+          slot: 1,
+        }).catch(() => {});
       }
     };
   }, [currentSwap]);
@@ -199,21 +181,10 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
     if (!currentSwap) return;
 
     try {
-      // Clear LEDs
-      await Promise.all([
-        ...currentSwap.groupA.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentSwap.groupA.unitIpAddress,
-            slot,
-          })
-        ),
-        ...currentSwap.groupB.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentSwap.groupB.unitIpAddress,
-            slot,
-          })
-        ),
-      ]);
+      await clearSlotLight({
+        ipAddress: currentSwap.groupA.unitIpAddress,
+        slot: 1,
+      });
 
       // Update locations: swap the records
       if (currentSwap.groupA.record && currentSwap.groupB.record) {
@@ -245,20 +216,10 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
 
   const handleCancel = async () => {
     if (currentSwap) {
-      await Promise.all([
-        ...currentSwap.groupA.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentSwap.groupA.unitIpAddress,
-            slot,
-          })
-        ),
-        ...currentSwap.groupB.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentSwap.groupB.unitIpAddress,
-            slot,
-          })
-        ),
-      ]);
+      await clearSlotLight({
+        ipAddress: currentSwap.groupA.unitIpAddress,
+        slot: 1,
+      });
     }
     navigation.goBack();
   };

@@ -181,18 +181,16 @@ export const UnitLayoutScreen: React.FC<Props> = ({ route }) => {
     if (!unit || !activeGroup) return;
     try {
       setLighting(true);
-      await Promise.all(
-        activeGroup.physicalSlots.map((slot) =>
-          setSlotLight({
-            ipAddress: unit.ipAddress,
-            slot,
-            totalSlots: unit.totalSlots,
-            color: '#08F7FE',
-            brightness: 0.9,
-            effect: 'steady',
-          })
-        )
-      );
+      const slots = activeGroup.physicalSlots;
+      await setSlotLight({
+        ipAddress: unit.ipAddress,
+        slot: slots[0],
+        allSlots: slots,
+        totalSlots: unit.totalSlots,
+        color: '#08F7FE',
+        brightness: 0.9,
+        effect: 'steady',
+      });
     } catch {
       // handled inside client
     } finally {

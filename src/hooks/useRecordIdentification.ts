@@ -31,6 +31,11 @@ export type SuggestionsState = {
   albumSuggestions?: Array<AlbumSuggestion>;
   candidates?: IdentificationMatch[]; // Legacy - deprecated
   extractedText?: string; // Debug only - not shown to user
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+  };
 } | null;
 
 export interface UseRecordIdentificationReturn {
@@ -51,6 +56,7 @@ export interface UseRecordIdentificationReturn {
   setResult: (result: ScanResult | null) => void;
   cancelIdentification: () => void;
   clearResult: () => void;
+  retryIdentification: () => Promise<void>;
 }
 
 export function useRecordIdentification(): UseRecordIdentificationReturn {

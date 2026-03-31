@@ -47,7 +47,7 @@ import {
   Track,
 } from '../data/types';
 import { LibraryStackParamList } from '../navigation/types';
-import { setSlotLight } from '../services/ShelfLightingClient';
+import { highlightAlbumSlots, setSlotLight } from '../services/ShelfLightingClient';
 import { AppIconButton } from '../components/AppIconButton';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'RecordDetail'>;
@@ -178,6 +178,16 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setLoading(false);
     }
   }, [recordId, record]);
+
+  // When the user opens an album that has a shelf location, highlight those slot(s) on the ESP32
+  // (silent failure if shelf URL is unset or device offline).
+  useEffect(() => {
+    if (!location?.slotNumbers?.length) return;
+    const timer = setTimeout(() => {
+      highlightAlbumSlots(location.slotNumbers);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [recordId, location?.id, location?.slotNumbers?.join(',')]);
 
   useFocusEffect(
     useCallback(() => {
@@ -464,18 +474,15 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
     try {
       setLighting(true);
-      await Promise.all(
-        location.slotNumbers.map((slot) =>
-          setSlotLight({
-            ipAddress: unitRecord.ipAddress,
-            slot,
-            totalSlots: unitRecord.totalSlots,
-            color: '#08F7FE',
-            brightness: 0.9,
-            effect: 'steady',
-          })
-        )
-      );
+      await setSlotLight({
+        ipAddress: unitRecord.ipAddress,
+        slot: location.slotNumbers[0],
+        allSlots: location.slotNumbers,
+        totalSlots: unitRecord.totalSlots,
+        color: '#08F7FE',
+        brightness: 0.9,
+        effect: 'steady',
+      });
     } catch (error) {
       console.log(error);
     } finally {

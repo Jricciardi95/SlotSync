@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../hooks/useTheme';
+import { AppTheme } from '../theme';
 import { AppText } from './AppText';
 
 interface AppScreenProps {
@@ -80,7 +81,7 @@ export const AppScreen: React.FC<AppScreenProps> = ({
 
 // Styles are defined inline with theme values to ensure spacing is always available
 // This avoids StyleSheet.create issues with dynamic theme values
-const createStyles = (spacing: typeof theme.spacing) => StyleSheet.create({
+const createStyles = (spacing: AppTheme['spacing']) => StyleSheet.create({
   container: {
     flex: 1,
   },

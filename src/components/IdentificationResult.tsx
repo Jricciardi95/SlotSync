@@ -50,8 +50,47 @@ interface IdentificationResultProps {
   onUseSuggestion: (suggestion: AlbumSuggestion, allSuggestions: AlbumSuggestion[]) => void;
   onClearSuggestions: () => void;
   onEnterManually: (imageUri?: string) => void;
+  onRetry?: () => void | Promise<void>;
   navigation: NavigationProp<LibraryStackParamList>;
 }
+
+const ErrorRetryScreen: React.FC<{
+  error: { code: string; message: string; retryable: boolean };
+  capturedUri: string | null;
+  onRetry: () => void;
+  onCancel: () => void;
+  onEnterManually: (imageUri?: string) => void;
+}> = ({ error, capturedUri, onRetry, onCancel, onEnterManually }) => {
+  const { colors, spacing } = useTheme();
+  if (!error) return null;
+  return (
+    <AppScreen title="Could not identify">
+      <View style={styles.screenContainer}>
+        <View style={styles.headerActions}>
+          <AppIconButton name="close" onPress={onCancel} />
+        </View>
+        <AppCard>
+          <AppText variant="subtitle" style={{ marginBottom: spacing.sm }}>
+            {error.code !== 'UNKNOWN' ? error.code.replace(/_/g, ' ') : 'Error'}
+          </AppText>
+          <AppText variant="body" style={{ marginBottom: spacing.lg, color: colors.textSecondary }}>
+            {error.message}
+          </AppText>
+          {error.retryable && (
+            <AppButton title="Try again" onPress={onRetry} style={{ marginBottom: spacing.sm }} />
+          )}
+          <AppButton
+            title="Enter manually"
+            variant="secondary"
+            onPress={() => onEnterManually(capturedUri ?? undefined)}
+            style={{ marginBottom: spacing.sm }}
+          />
+          <AppButton title="Cancel" variant="ghost" onPress={onCancel} />
+        </AppCard>
+      </View>
+    </AppScreen>
+  );
+};
 
 // Helper function to sort tracks by position
 const sortTracksByPosition = (tracks?: Array<{ title: string; position?: number }>) => {

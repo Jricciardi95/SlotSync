@@ -98,17 +98,15 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
     const lightSlots = async () => {
       setLighting(true);
       try {
-        await Promise.all(
-          currentMapping.slotGroup.physicalSlots.map((slot) =>
-            setSlotLight({
-              ipAddress: currentMapping.slotGroup.unitIpAddress,
-              slot,
-              color: '#08F7FE',
-              brightness: 0.9,
-              effect: 'steady',
-            })
-          )
-        );
+        const slots = currentMapping.slotGroup.physicalSlots;
+        await setSlotLight({
+          ipAddress: currentMapping.slotGroup.unitIpAddress,
+          slot: slots[0],
+          allSlots: slots,
+          color: '#08F7FE',
+          brightness: 0.9,
+          effect: 'steady',
+        });
       } catch {
         // Error handled in client
       } finally {
@@ -121,12 +119,10 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
     return () => {
       // Clear lights when component unmounts or mapping changes
       if (currentMapping) {
-        currentMapping.slotGroup.physicalSlots.forEach((slot) => {
-          clearSlotLight({
-            ipAddress: currentMapping.slotGroup.unitIpAddress,
-            slot,
-          }).catch(() => {});
-        });
+        clearSlotLight({
+          ipAddress: currentMapping.slotGroup.unitIpAddress,
+          slot: 1,
+        }).catch(() => {});
       }
     };
   }, [currentMapping]);
@@ -135,15 +131,10 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
     if (!currentMapping) return;
 
     try {
-      // Clear LEDs
-      await Promise.all(
-        currentMapping.slotGroup.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentMapping.slotGroup.unitIpAddress,
-            slot,
-          })
-        )
-      );
+      await clearSlotLight({
+        ipAddress: currentMapping.slotGroup.unitIpAddress,
+        slot: 1,
+      });
 
       // Save location
       await assignRecordToSlotGroup({
@@ -167,14 +158,10 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleCancel = async () => {
     if (currentMapping) {
-      await Promise.all(
-        currentMapping.slotGroup.physicalSlots.map((slot) =>
-          clearSlotLight({
-            ipAddress: currentMapping.slotGroup.unitIpAddress,
-            slot,
-          })
-        )
-      );
+      await clearSlotLight({
+        ipAddress: currentMapping.slotGroup.unitIpAddress,
+        slot: 1,
+      });
     }
     navigation.goBack();
   };
