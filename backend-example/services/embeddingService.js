@@ -1,24 +1,15 @@
 /**
  * Image Embedding Service
- * 
- * Generates vector embeddings for album cover images to enable similarity search.
- * 
- * Supports:
- * - OpenAI image embeddings (if OPENAI_API_KEY is set)
- * - CLIP embeddings via @xenova/transformers (self-hosted, no API key needed)
- * 
- * Usage:
+ *
+ * CLIP embeddings via @xenova/transformers (local, no third-party API).
+ *
  *   const embedding = await getImageEmbedding(imageBuffer);
- *   const similar = await findNearestCovers(embedding, 5);
  */
 
-const axios = require('axios');
 const sharp = require('sharp');
 
 const config = require('../config');
 const logger = require('./logger');
-const OPENAI_API_KEY = config.openai.apiKey;
-const USE_OPENAI = !!OPENAI_API_KEY;
 
 // CLIP model will be loaded lazily (cached after first load)
 let clipModel = null;
@@ -92,24 +83,6 @@ async function initializeEmbeddingModel() {
     logger.warn(`[Embedding] ⚠️  CLIP model preload error (${elapsedMs}ms):`, error.message);
     // Don't throw - allow server to start without CLIP (fallback behavior)
   }
-}
-
-/**
- * Get image embedding using OpenAI Vision API
- * Note: OpenAI doesn't have a direct image embedding API, so we use CLIP embeddings
- * or a self-hosted solution. For now, we'll use CLIP as the primary method.
- * 
- * If you want to use OpenAI, you could:
- * 1. Use OpenAI's vision model to describe the image, then embed the description
- * 2. Use a third-party service that provides CLIP embeddings via API
- * 
- * For this implementation, we'll use CLIP (self-hosted) as the primary method.
- */
-async function getOpenAIEmbedding(imageBuffer) {
-  // OpenAI doesn't have direct image embeddings
-  // Fall back to CLIP
-  console.warn('[Embedding] OpenAI direct image embeddings not available, using CLIP');
-  return await getCLIPEmbedding(imageBuffer);
 }
 
 /**
@@ -332,7 +305,7 @@ async function getCLIPEmbedding(imageBuffer, preprocess = true) {
 }
 
 /**
- * Get image embedding (tries OpenAI first, falls back to CLIP)
+ * Get image embedding (CLIP)
  * Includes simple caching to avoid recomputing the same image
  * 
  * @param {Buffer} imageBuffer - Image buffer (JPEG/PNG)
@@ -360,21 +333,8 @@ async function getImageEmbedding(imageBuffer, useCache = true) {
 
   try {
     const embeddingPromise = (async () => {
-      // Try OpenAI first if available
-      if (USE_OPENAI) {
-        try {
-          console.log('[Embedding] Using OpenAI for image embedding');
-          return await getOpenAIEmbedding(imageBuffer);
-        } catch (error) {
-          console.warn('[Embedding] OpenAI failed, falling back to CLIP:', error.message);
-          // Fall through to CLIP
-          return await getCLIPEmbedding(imageBuffer);
-        }
-      } else {
-        // Use CLIP as primary if no OpenAI key
-        console.log('[Embedding] Using CLIP for image embedding');
-        return await getCLIPEmbedding(imageBuffer);
-      }
+      console.log('[Embedding] Using CLIP for image embedding');
+      return await getCLIPEmbedding(imageBuffer);
     })();
 
     const timeoutPromise = new Promise((_, reject) => {
@@ -539,6 +499,5 @@ module.exports = {
   cosineSimilarity,
   validateAndNormalizeEmbedding,
   initializeEmbeddingModel,
-  USE_OPENAI,
 };
 

@@ -1,9 +1,12 @@
-import React, { useState, createContext, useContext, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { AppText } from '../components/AppText';
 import { navigationHelpers } from './navigationHelpers';
+import { logger } from '../utils/logger';
+import { ShelfOfflineBanner } from '../components/ShelfOfflineBanner';
+import { NavigationContext } from './NavigationContext';
 
 // Screen imports - direct imports (no circular dependencies since screens import from navigation, not vice versa)
 import { LibraryScreen } from '../screens/LibraryScreen';
@@ -38,31 +41,6 @@ type NavigationState = {
   batchStack: string[];
 };
 
-type NavigationContextType = {
-  navigate: (screen: string, params?: any) => void;
-  goBack: () => void;
-  canGoBack: () => boolean;
-  currentScreen: string;
-  params: any;
-};
-
-export const NavigationContext = createContext<NavigationContextType | null>(null);
-
-export const useNavigation = () => {
-  const context = useContext(NavigationContext);
-  if (!context) {
-    // Return a mock navigation for screens that expect it
-    return {
-      navigate: () => {},
-      goBack: () => {},
-      canGoBack: () => false,
-      currentScreen: '',
-      params: {},
-    };
-  }
-  return context;
-};
-
 export const CustomNavigation: React.FC = () => {
   const [state, setState] = useState<NavigationState>({
     currentTab: 'Library',
@@ -77,12 +55,12 @@ export const CustomNavigation: React.FC = () => {
   const paramsRef = React.useRef<Record<string, any>>({});
 
   const navigate = (screen: string, params?: any) => {
-    console.log('[CustomNavigation] navigate called:', screen, 'with params:', params);
+    logger.verbose('[CustomNavigation] navigate', screen, params);
     
     // CRITICAL: Update ref immediately (synchronous) so params are available right away
     if (params) {
       paramsRef.current = { ...paramsRef.current, [screen]: params };
-      console.log('[CustomNavigation] ✅ Set params ref for screen:', screen, 'params:', params);
+      logger.verbose('[CustomNavigation] params ref', screen);
     } else {
       const updated = { ...paramsRef.current };
       delete updated[screen];
@@ -93,7 +71,7 @@ export const CustomNavigation: React.FC = () => {
     if (params) {
       setScreenParams((prev) => {
         const updated = { ...prev, [screen]: params };
-        console.log('[CustomNavigation] ✅ Set params state for screen:', screen);
+        logger.verbose('[CustomNavigation] params state', screen);
         return updated;
       });
     } else {
@@ -120,7 +98,7 @@ export const CustomNavigation: React.FC = () => {
         newState[stackKey] = [...newState[stackKey], screen];
       }
       
-      console.log('[CustomNavigation] ✅ Updated navigation state, new stack:', newState[stackKey]);
+      logger.verbose('[CustomNavigation] stack', newState[stackKey]);
       return newState;
     });
   };
@@ -168,7 +146,7 @@ export const CustomNavigation: React.FC = () => {
   
   // Debug logging to track params
   useEffect(() => {
-    console.log('[CustomNavigation] Current screen:', currentScreen, 'params:', params, 'all screenParams:', screenParams);
+    logger.verbose('[CustomNavigation] screen', currentScreen);
   }, [currentScreen, params, screenParams]);
 
   const renderScreen = () => {
@@ -276,6 +254,7 @@ export const CustomNavigation: React.FC = () => {
   return (
     <NavigationContext.Provider value={{ navigate, goBack, canGoBack, currentScreen, params }}>
       <View style={styles.container}>
+        <ShelfOfflineBanner />
         <View style={styles.content}>{renderScreen()}</View>
         <View
           style={[

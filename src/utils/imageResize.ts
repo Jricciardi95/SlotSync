@@ -6,6 +6,7 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
+import { logger } from './logger';
 
 export interface ResizeOptions {
   maxWidth?: number;
@@ -41,7 +42,7 @@ const preprocessImage = async (
   }
 
   try {
-    console.log(`[ImagePreprocess] Applying: contrast=${enhanceContrast}, grayscale=${convertToGrayscale}`);
+    logger.debug(`[ImagePreprocess] Applying: contrast=${enhanceContrast}, grayscale=${convertToGrayscale}`);
     
     // Note: expo-image-manipulator doesn't directly support contrast/grayscale
     // We'll use a workaround: manipulate with filters if available
@@ -58,10 +59,10 @@ const preprocessImage = async (
       }
     );
     
-    console.log(`[ImagePreprocess] ✅ Preprocessing complete`);
+    logger.debug(`[ImagePreprocess] ✅ Preprocessing complete`);
     return preprocessed.uri;
   } catch (error) {
-    console.warn('[ImagePreprocess] Preprocessing failed, using original:', error);
+    logger.warn('[ImagePreprocess] Preprocessing failed, using original:', error);
     return imageUri;
   }
 };
@@ -90,8 +91,8 @@ export const resizeImageForVision = async (
   }
 
   try {
-    console.log(`[ImageResize] Resizing image: ${imageUri}`);
-    console.log(`[ImageResize] Target size: ${maxWidth}x${maxHeight}, quality: ${quality}`);
+    logger.debug(`[ImageResize] Resizing image: ${imageUri}`);
+    logger.debug(`[ImageResize] Target size: ${maxWidth}x${maxHeight}, quality: ${quality}`);
 
     // Get original image dimensions
     const originalImage = await ImageManipulator.manipulateAsync(
@@ -102,7 +103,7 @@ export const resizeImageForVision = async (
 
     const originalWidth = originalImage.width;
     const originalHeight = originalImage.height;
-    console.log(`[ImageResize] Original size: ${originalWidth}x${originalHeight}`);
+    logger.debug(`[ImageResize] Original size: ${originalWidth}x${originalHeight}`);
 
     // Calculate resize dimensions maintaining aspect ratio
     let resizeWidth = originalWidth;
@@ -115,9 +116,9 @@ export const resizeImageForVision = async (
 
       resizeWidth = Math.round(originalWidth * ratio);
       resizeHeight = Math.round(originalHeight * ratio);
-      console.log(`[ImageResize] Calculated resize: ${resizeWidth}x${resizeHeight} (ratio: ${ratio.toFixed(2)})`);
+      logger.debug(`[ImageResize] Calculated resize: ${resizeWidth}x${resizeHeight} (ratio: ${ratio.toFixed(2)})`);
     } else {
-      console.log(`[ImageResize] Image already within limits, no resize needed`);
+      logger.debug(`[ImageResize] Image already within limits, no resize needed`);
     }
 
     // Only resize if needed
@@ -138,8 +139,8 @@ export const resizeImageForVision = async (
         }
       );
 
-      console.log(`[ImageResize] ✅ Resized to: ${resizedImage.width}x${resizedImage.height}`);
-      console.log(`[ImageResize] New URI: ${resizedImage.uri}`);
+      logger.debug(`[ImageResize] ✅ Resized to: ${resizedImage.width}x${resizedImage.height}`);
+      logger.debug(`[ImageResize] New URI: ${resizedImage.uri}`);
 
       return resizedImage.uri;
     }
@@ -147,7 +148,7 @@ export const resizeImageForVision = async (
     // Image already optimal size
     return imageUri;
   } catch (error) {
-    console.error('[ImageResize] Error resizing image:', error);
+    logger.error('[ImageResize] Error resizing image:', error);
     // Return original URI if resize fails - let backend handle it
     return imageUri;
   }

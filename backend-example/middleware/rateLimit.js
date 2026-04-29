@@ -6,23 +6,26 @@
 
 const rateLimit = require('express-rate-limit');
 
+const apiMax = Math.max(1, parseInt(process.env.API_RATE_LIMIT_MAX || '120', 10));
+const identifyMax = Math.max(1, parseInt(process.env.IDENTIFY_RATE_LIMIT_MAX || '40', 10));
+
 /**
- * General API rate limiter: 100 requests per 15 minutes per IP
+ * General API rate limiter (tune with API_RATE_LIMIT_MAX for shared NAT / beta)
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: apiMax,
   message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
- * Stricter rate limiter for identify-record endpoint: 20 requests per 15 minutes
+ * Stricter limiter for POST /api/identify-record (tune with IDENTIFY_RATE_LIMIT_MAX)
  */
 const identifyRecordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Limit each IP to 20 requests per windowMs (more restrictive due to API costs)
+  windowMs: 15 * 60 * 1000,
+  max: identifyMax,
   message: 'Too many identification requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,

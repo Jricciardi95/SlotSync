@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -69,7 +70,7 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
 
         setItems(cleanupItems);
       } catch (error) {
-        console.error('Failed to load cleanup items', error);
+        logger.error('Failed to load cleanup items', error);
         Alert.alert('Error', 'Could not load records for cleanup.');
         navigation.goBack();
       } finally {
@@ -160,7 +161,7 @@ export const CleanupModeFlowScreen: React.FC<Props> = ({ route, navigation }) =>
         ]);
       }
     } catch (error) {
-      console.error('Failed to mark returned', error);
+      logger.error('Failed to mark returned', error);
       Alert.alert('Error', 'Could not mark record as returned.');
     }
   };

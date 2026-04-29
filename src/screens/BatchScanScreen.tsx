@@ -20,6 +20,7 @@ import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
 import { AppButton } from '../components/AppButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import { LibraryStackParamList } from '../navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useBatchScan, PendingPhoto } from '../contexts/BatchScanContext';
@@ -68,12 +69,12 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
 
       if (photo?.uri) {
         // CRITICAL: Convert to JPEG before adding (HEIC → JPEG)
-        console.log('[BatchScan] Converting captured image to JPEG...');
+        logger.debug('[BatchScan] Converting captured image to JPEG...');
         const jpegUri = await convertToJpeg(photo.uri, {
           maxWidth: 1200,
           quality: 0.8,
         });
-        console.log('[BatchScan] ✅ Image converted to JPEG');
+        logger.debug('[BatchScan] ✅ Image converted to JPEG');
         const newPhoto: PendingPhoto = {
           id: `photo_${Date.now()}_${Math.random()}`,
           uri: jpegUri, // Use JPEG version, not original
@@ -82,7 +83,7 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
         addPhoto(newPhoto);
       }
     } catch (error) {
-      console.error('Failed to capture photo', error);
+      logger.error('Failed to capture photo', error);
       Alert.alert('Error', 'Could not capture photo. Please try again.');
     } finally {
       setCapturing(false);
@@ -109,13 +110,13 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
 
       if (!result.canceled && result.assets) {
         // CRITICAL: Convert all selected images to JPEG (HEIC → JPEG)
-        console.log(`[BatchScan] Converting ${result.assets.length} selected images to JPEG...`);
+        logger.debug(`[BatchScan] Converting ${result.assets.length} selected images to JPEG...`);
         const imageUris = result.assets.map(asset => asset.uri);
         const jpegUris = await convertMultipleToJpeg(imageUris, {
           maxWidth: 1200,
           quality: 0.8,
         });
-        console.log(`[BatchScan] ✅ Converted ${jpegUris.length} images to JPEG`);
+        logger.debug(`[BatchScan] ✅ Converted ${jpegUris.length} images to JPEG`);
         
         jpegUris.forEach((jpegUri, index) => {
           const newPhoto: PendingPhoto = {
@@ -263,9 +264,9 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
 
       // Log failures for debugging
       if (importResult.failures.length > 0) {
-        console.warn(`[BatchScan CSV] ⚠️  ${importResult.failures.length} rows failed:`);
+        logger.warn(`[BatchScan CSV] ⚠️  ${importResult.failures.length} rows failed:`);
         for (const failure of importResult.failures) {
-          console.warn(`[BatchScan CSV]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
+          logger.warn(`[BatchScan CSV]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
         }
       }
 
@@ -285,7 +286,7 @@ export const BatchScanScreen: React.FC<Props> = ({ navigation }) => {
         ]
       );
     } catch (error) {
-      console.error('CSV import failed', error);
+      logger.error('CSV import failed', error);
       setImportingCSV(false);
       Alert.alert('Error', 'Could not import CSV file. Please check the file format and try again.');
     }

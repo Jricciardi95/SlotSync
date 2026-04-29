@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppScreen } from './AppScreen';
@@ -17,9 +18,12 @@ import { useTheme } from '../hooks/useTheme';
 import {
   clearStoredShelfBaseUrl,
   getStoredShelfBaseUrl,
+  getShelfAutoHighlightEnabled,
   normalizeShelfBaseUrl,
+  setShelfAutoHighlightEnabled,
   setStoredShelfBaseUrl,
 } from '../services/shelfApi/storage';
+import { formatShelfFailureForUser } from '../services/shelfApi/shelfUserMessages';
 import {
   shelfBlinkSlot,
   shelfClear,
@@ -78,6 +82,7 @@ export const ShelfConnectionPanel: React.FC<Props> = ({ onBack }) => {
   const [busy, setBusy] = useState(false);
   const [lastJson, setLastJson] = useState<string>('');
   const [, bump] = useState(0);
+  const [autoHighlight, setAutoHighlight] = useState(true);
 
   useEffect(() => {
     return subscribeShelfConnection(() => bump((n) => n + 1));
@@ -92,6 +97,7 @@ export const ShelfConnectionPanel: React.FC<Props> = ({ onBack }) => {
           const withoutProto = u.replace(/^https?:\/\//i, '');
           setInput(withoutProto);
         }
+        setAutoHighlight(await getShelfAutoHighlightEnabled());
       } finally {
         setLoading(false);
       }
@@ -182,6 +188,19 @@ export const ShelfConnectionPanel: React.FC<Props> = ({ onBack }) => {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <AppCard>
           <AppText variant="subtitle" style={styles.mb}>
+            Private beta note
+          </AppText>
+          <AppText variant="body" style={{ color: colors.textMuted, marginBottom: spacing.sm }}>
+            Shelf lighting is optional. Scanning, identification, and your library work without it. To use LEDs,
+            your phone and the ESP32 must be on the same Wi‑Fi; there is no cloud shelf yet.
+          </AppText>
+          <AppText variant="caption" style={{ color: colors.textMuted }}>
+            If connection fails, check the IP, Wi‑Fi, and firewall — the rest of the app still works.
+          </AppText>
+        </AppCard>
+
+        <AppCard style={styles.mtCard}>
+          <AppText variant="subtitle" style={styles.mb}>
             Shelf address
           </AppText>
           <AppText variant="caption" style={[styles.mb, { color: colors.textMuted }]}>
@@ -215,10 +234,34 @@ export const ShelfConnectionPanel: React.FC<Props> = ({ onBack }) => {
         </AppCard>
 
         <AppCard style={styles.mtCard}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <AppText variant="subtitle" style={styles.mb}>
+                Auto-light shelf when opening an album
+              </AppText>
+              <AppText variant="caption" style={{ color: colors.textMuted }}>
+                When off, LEDs only change when you use shelf modes or tap Light on the album screen.
+              </AppText>
+            </View>
+            <Switch
+              value={autoHighlight}
+              onValueChange={(v) => {
+                setAutoHighlight(v);
+                void setShelfAutoHighlightEnabled(v);
+              }}
+              trackColor={{ false: colors.borderSubtle, true: colors.accentMuted }}
+              thumbColor={autoHighlight ? colors.accent : colors.textMuted}
+            />
+          </View>
+        </AppCard>
+
+        <AppCard style={styles.mtCard}>
           <AppText variant="subtitle" style={styles.mb}>
             Connection health
           </AppText>
-          <AppText variant="body">Saved URL: {savedUrl ?? '—'}</AppText>
+          <AppText variant="body">
+            Saved URL: {savedUrl ?? 'Not set — shelf lighting uses unit IP from Stands if available'}
+          </AppText>
           <AppText variant="body" style={styles.mtSm}>
             Last success:{' '}
             {snapshot.lastSuccessAt
@@ -226,8 +269,8 @@ export const ShelfConnectionPanel: React.FC<Props> = ({ onBack }) => {
               : '—'}
           </AppText>
           {snapshot.lastError ? (
-            <AppText variant="caption" style={{ color: '#FF6B6B', marginTop: 8 }}>
-              Last error: {snapshot.lastError}
+            <AppText variant="caption" style={{ color: colors.error, marginTop: 8 }}>
+              Last issue: {formatShelfFailureForUser(snapshot.lastError)}
             </AppText>
           ) : null}
         </AppCard>

@@ -5,6 +5,8 @@
  * All debug logs are behind a flag and sanitize sensitive data.
  */
 
+import { logger } from './logger';
+
 /**
  * Enable debug logging for identification pipeline
  * Set to true to see detailed logs, false for production
@@ -57,7 +59,7 @@ export function debugLog(category: string, message: string, data?: any): void {
 
   const sanitizedData = data ? sanitizeForLogging(data) : undefined;
   
-  console.log(`[DEBUG:${category}] ${message}`, sanitizedData || '');
+  logger.debug(`[DEBUG:${category}] ${message}`, sanitizedData || '');
 }
 
 /**
@@ -164,9 +166,9 @@ const log = (category: LogCategory, message: string, data?: any) => {
     }
 
     if (sanitizedData) {
-      console.log(formattedMessage, sanitizedData);
+      logger.debug(formattedMessage, sanitizedData);
     } else {
-      console.log(formattedMessage);
+      logger.debug(formattedMessage);
     }
   }
 };

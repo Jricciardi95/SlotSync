@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { logger } from '../utils/logger';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -121,7 +122,7 @@ const createDatabaseAsync = async () => {
     } catch (error: any) {
       // Column already exists, ignore error
       if (!error.message?.includes('duplicate column name')) {
-        console.warn('[Database] Could not add bpm column (may already exist):', error.message);
+        logger.warn('[Database] Could not add bpm column (may already exist):', error.message);
       }
     }
 
@@ -156,11 +157,11 @@ const createDatabaseAsync = async () => {
     for (const migration of migrations) {
       try {
         await db.execAsync(`ALTER TABLE records ADD COLUMN ${migration.column} ${migration.type};`);
-        console.log(`[Database] ✅ Added column: ${migration.column}`);
+        logger.debug(`[Database] ✅ Added column: ${migration.column}`);
       } catch (error: any) {
         // Column already exists, ignore error
         if (!error.message?.includes('duplicate column name')) {
-          console.warn(`[Database] Migration warning for ${migration.column}:`, error.message);
+          logger.warn(`[Database] Migration warning for ${migration.column}:`, error.message);
         }
       }
     }
@@ -173,9 +174,9 @@ const createDatabaseAsync = async () => {
         ON records(discogsId) 
         WHERE discogsId IS NOT NULL;
       `);
-      console.log('[Database] ✅ Created unique index on discogsId');
+      logger.debug('[Database] ✅ Created unique index on discogsId');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for discogsId:', error.message);
+      logger.warn('[Database] Index creation warning for discogsId:', error.message);
     }
     
     try {
@@ -185,9 +186,9 @@ const createDatabaseAsync = async () => {
         ON records(normalizedArtist, normalizedTitle, year) 
         WHERE normalizedArtist IS NOT NULL AND normalizedTitle IS NOT NULL AND year IS NOT NULL;
       `);
-      console.log('[Database] ✅ Created unique index on (normalizedArtist, normalizedTitle, year)');
+      logger.debug('[Database] ✅ Created unique index on (normalizedArtist, normalizedTitle, year)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for identity_with_year:', error.message);
+      logger.warn('[Database] Index creation warning for identity_with_year:', error.message);
     }
     
     try {
@@ -197,9 +198,9 @@ const createDatabaseAsync = async () => {
         ON records(normalizedArtist, normalizedTitle) 
         WHERE normalizedArtist IS NOT NULL AND normalizedTitle IS NOT NULL AND year IS NULL;
       `);
-      console.log('[Database] ✅ Created unique index on (normalizedArtist, normalizedTitle)');
+      logger.debug('[Database] ✅ Created unique index on (normalizedArtist, normalizedTitle)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for identity_no_year:', error.message);
+      logger.warn('[Database] Index creation warning for identity_no_year:', error.message);
     }
 
     // Create image_hashes table for caching identified albums
@@ -217,7 +218,7 @@ const createDatabaseAsync = async () => {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_image_hashes_hash ON image_hashes(imageHash);`);
     } catch (error: any) {
       // Index might already exist, ignore
-      console.warn('[Database] Index creation warning:', error.message);
+      logger.warn('[Database] Index creation warning:', error.message);
     }
 
     // Create playlists table
@@ -252,91 +253,91 @@ const createDatabaseAsync = async () => {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_playlist_items_record ON playlist_items(recordId);`);
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_playlist_items_track ON playlist_items(trackId);`);
     } catch (error: any) {
-      console.warn('[Database] Playlist index creation warning:', error.message);
+      logger.warn('[Database] Playlist index creation warning:', error.message);
     }
     
     // PR5: Add performance indexes for hot paths
     try {
       // Indexes for records table (search/filter operations)
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_records_normalized_artist ON records(normalizedArtist);`);
-      console.log('[Database] ✅ Created index on records(normalizedArtist)');
+      logger.debug('[Database] ✅ Created index on records(normalizedArtist)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for normalizedArtist:', error.message);
+      logger.warn('[Database] Index creation warning for normalizedArtist:', error.message);
     }
     
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_records_normalized_title ON records(normalizedTitle);`);
-      console.log('[Database] ✅ Created index on records(normalizedTitle)');
+      logger.debug('[Database] ✅ Created index on records(normalizedTitle)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for normalizedTitle:', error.message);
+      logger.warn('[Database] Index creation warning for normalizedTitle:', error.message);
     }
     
     try {
       // Composite index for artist+title searches (already have unique index, but this is for non-unique queries)
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_records_artist_title ON records(normalizedArtist, normalizedTitle);`);
-      console.log('[Database] ✅ Created index on records(normalizedArtist, normalizedTitle)');
+      logger.debug('[Database] ✅ Created index on records(normalizedArtist, normalizedTitle)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for artist_title:', error.message);
+      logger.warn('[Database] Index creation warning for artist_title:', error.message);
     }
     
     try {
       // Index for tracks table (foreign key lookups)
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_tracks_record_id ON tracks(recordId);`);
-      console.log('[Database] ✅ Created index on tracks(recordId)');
+      logger.debug('[Database] ✅ Created index on tracks(recordId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for tracks(recordId):', error.message);
+      logger.warn('[Database] Index creation warning for tracks(recordId):', error.message);
     }
     
     try {
       // Index for playlist_items ordering (position/sortOrder)
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist_position ON playlist_items(playlistId, position);`);
-      console.log('[Database] ✅ Created index on playlist_items(playlistId, position)');
+      logger.debug('[Database] ✅ Created index on playlist_items(playlistId, position)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for playlist_items(playlistId, position):', error.message);
+      logger.warn('[Database] Index creation warning for playlist_items(playlistId, position):', error.message);
     }
     
     try {
       // Indexes for recordLocations table (shelf/slot lookups)
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_record_locations_record_id ON recordLocations(recordId);`);
-      console.log('[Database] ✅ Created index on recordLocations(recordId)');
+      logger.debug('[Database] ✅ Created index on recordLocations(recordId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for recordLocations(recordId):', error.message);
+      logger.warn('[Database] Index creation warning for recordLocations(recordId):', error.message);
     }
     
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_record_locations_unit_id ON recordLocations(unitId);`);
-      console.log('[Database] ✅ Created index on recordLocations(unitId)');
+      logger.debug('[Database] ✅ Created index on recordLocations(unitId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for recordLocations(unitId):', error.message);
+      logger.warn('[Database] Index creation warning for recordLocations(unitId):', error.message);
     }
     
     // PR7: Create indexes for slot assignment tables
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_slots_unit_id ON slots(unitId);`);
-      console.log('[Database] ✅ Created index on slots(unitId)');
+      logger.debug('[Database] ✅ Created index on slots(unitId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for slots(unitId):', error.message);
+      logger.warn('[Database] Index creation warning for slots(unitId):', error.message);
     }
     
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_record_slot_assignments_record_id ON recordSlotAssignments(recordId);`);
-      console.log('[Database] ✅ Created index on recordSlotAssignments(recordId)');
+      logger.debug('[Database] ✅ Created index on recordSlotAssignments(recordId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for recordSlotAssignments(recordId):', error.message);
+      logger.warn('[Database] Index creation warning for recordSlotAssignments(recordId):', error.message);
     }
     
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_record_slot_assignments_unit_id ON recordSlotAssignments(unitId);`);
-      console.log('[Database] ✅ Created index on recordSlotAssignments(unitId)');
+      logger.debug('[Database] ✅ Created index on recordSlotAssignments(unitId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for recordSlotAssignments(unitId):', error.message);
+      logger.warn('[Database] Index creation warning for recordSlotAssignments(unitId):', error.message);
     }
     
     try {
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_record_slot_assignments_slot_id ON recordSlotAssignments(slotId);`);
-      console.log('[Database] ✅ Created index on recordSlotAssignments(slotId)');
+      logger.debug('[Database] ✅ Created index on recordSlotAssignments(slotId)');
     } catch (error: any) {
-      console.warn('[Database] Index creation warning for recordSlotAssignments(slotId):', error.message);
+      logger.warn('[Database] Index creation warning for recordSlotAssignments(slotId):', error.message);
     }
 
     // Migration: Rename playlist_records to playlist_items if it exists
@@ -349,11 +350,11 @@ const createDatabaseAsync = async () => {
         FROM playlist_records_old;
       `);
       await db.execAsync(`DROP TABLE playlist_records_old;`);
-      console.log('[Database] ✅ Migrated playlist_records to playlist_items');
+      logger.debug('[Database] ✅ Migrated playlist_records to playlist_items');
     } catch (error: any) {
       // Table doesn't exist or already migrated, ignore
       if (!error.message?.includes('no such table') && !error.message?.includes('already exists')) {
-        console.warn('[Database] Migration warning:', error.message);
+        logger.warn('[Database] Migration warning:', error.message);
       }
     }
   });
@@ -381,10 +382,10 @@ const createDatabaseAsync = async () => {
           );
         }
       });
-      console.log(`[Database] ✅ Backfilled normalized columns for ${existingRecords.length} existing records`);
+      logger.debug(`[Database] ✅ Backfilled normalized columns for ${existingRecords.length} existing records`);
     }
   } catch (error: any) {
-    console.warn('[Database] Backfill warning:', error.message);
+    logger.warn('[Database] Backfill warning:', error.message);
   }
 
   return db;

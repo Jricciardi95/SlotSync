@@ -23,6 +23,7 @@ import {
   persistUnitOrder,
 } from '../data/repository';
 import { Unit } from '../data/types';
+import { logger } from '../utils/logger';
 import { StandsStackParamList } from '../navigation/types';
 import { useFocusEffect } from '../navigation/useFocusEffect';
 
@@ -75,7 +76,7 @@ export const RowDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       await loadUnits();
     } catch (error) {
       Alert.alert('Could not create unit', 'Please try again.');
-      console.log(error);
+      logger.debug(error);
     }
   };
 
@@ -97,7 +98,7 @@ export const RowDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       persistUnitOrder(
         rowId,
         updated.map((unit, order) => ({ ...unit, positionIndex: order }))
-      ).catch((err) => console.log('Reorder failed', err));
+      ).catch((err) => logger.debug('Reorder failed', err));
 
       return updated.map((unit, order) => ({
         ...unit,

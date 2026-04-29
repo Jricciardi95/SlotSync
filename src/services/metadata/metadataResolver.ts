@@ -29,6 +29,7 @@ import { searchDiscogs, getDiscogsRelease, isValidDiscogsRelease, generateDiscog
 import { searchMusicBrainzRelease, getMusicBrainzReleaseDetails, findMusicBrainzIdFromDiscogs } from './musicbrainzClient';
 import { getCoverArtFromCAA } from './caaClient';
 import { debugIdentification } from '../../utils/debug';
+import { logger } from '../../utils/logger';
 
 /**
  * Parses Discogs track position to extract side and track number
@@ -176,11 +177,11 @@ export async function resolveAlbumFromCandidates(
   } = options;
 
   if (!candidates || candidates.length === 0) {
-    console.log('[MetadataResolver] No candidates provided');
+    logger.debug('[MetadataResolver] No candidates provided');
     return null;
   }
 
-  console.log(`[MetadataResolver] Resolving ${candidates.length} candidates...`);
+  logger.debug(`[MetadataResolver] Resolving ${candidates.length} candidates...`);
 
   // Try each candidate in order (sorted by confidence)
   const sortedCandidates = [...candidates].sort((a, b) => b.confidence - a.confidence);
@@ -190,7 +191,7 @@ export async function resolveAlbumFromCandidates(
       continue;
     }
 
-    console.log(`[MetadataResolver] Trying candidate: "${candidate.artist}" - "${candidate.album}" (confidence: ${candidate.confidence.toFixed(3)})`);
+    logger.debug(`[MetadataResolver] Trying candidate: "${candidate.artist}" - "${candidate.album}" (confidence: ${candidate.confidence.toFixed(3)})`);
 
     // STEP 1: Search Discogs
     const discogsResult = await searchDiscogs(candidate, {
@@ -200,7 +201,7 @@ export async function resolveAlbumFromCandidates(
     });
 
     if (!discogsResult) {
-      console.log(`[MetadataResolver] No Discogs match for candidate`);
+      logger.debug(`[MetadataResolver] No Discogs match for candidate`);
       continue;
     }
 
@@ -209,11 +210,11 @@ export async function resolveAlbumFromCandidates(
 
     // Validate Discogs result
     if (!isValidDiscogsRelease(discogsResult, preferVinyl)) {
-      console.log(`[MetadataResolver] Discogs result failed validation`);
+      logger.debug(`[MetadataResolver] Discogs result failed validation`);
       continue;
     }
 
-    console.log(`[MetadataResolver] ✅ Discogs match found: "${discogsResult.artist}" - "${discogsResult.title}"`);
+    logger.debug(`[MetadataResolver] ✅ Discogs match found: "${discogsResult.artist}" - "${discogsResult.title}"`);
 
     // STEP 2: Fetch full Discogs release details (for tracks, genre, etc.)
     let discogsRelease = null;
@@ -282,10 +283,10 @@ export async function resolveAlbumFromCandidates(
       // Prefer MusicBrainz tracks (more structured)
       if (mbDetails?.tracks && mbDetails.tracks.length > 0) {
         tracks = convertMusicBrainzTracks(mbDetails.tracks);
-        console.log(`[MetadataResolver] Using ${tracks.length} tracks from MusicBrainz`);
+        logger.debug(`[MetadataResolver] Using ${tracks.length} tracks from MusicBrainz`);
       } else if (discogsRelease?.tracks && discogsRelease.tracks.length > 0) {
         tracks = convertDiscogsTracks(discogsRelease.tracks);
-        console.log(`[MetadataResolver] Using ${tracks.length} tracks from Discogs`);
+        logger.debug(`[MetadataResolver] Using ${tracks.length} tracks from Discogs`);
       }
     }
 
@@ -320,7 +321,7 @@ export async function resolveAlbumFromCandidates(
       },
     };
 
-    console.log(`[MetadataResolver] ✅ Resolution complete:`, {
+    logger.debug(`[MetadataResolver] ✅ Resolution complete:`, {
       artist: resolved.artist,
       album: resolved.albumTitle,
       year: resolved.releaseYear,
@@ -332,7 +333,7 @@ export async function resolveAlbumFromCandidates(
     return resolved;
   }
 
-  console.log(`[MetadataResolver] ❌ No valid resolution found for any candidate`);
+  logger.debug(`[MetadataResolver] ❌ No valid resolution found for any candidate`);
   return null;
 }
 

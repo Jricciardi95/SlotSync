@@ -6,9 +6,8 @@
  */
 
 import { useContext } from 'react';
-import { NavigationContext, useNavigation as useCustomNavigation } from './CustomNavigation';
+import { NavigationContext, useNavigation as useCustomNavigation } from './NavigationContext';
 
-// Re-export useNavigation from CustomNavigation
 export { useCustomNavigation as useNavigation };
 
 // useRoute hook for compatibility

@@ -26,6 +26,7 @@ import { IdentificationMatch } from '../services/RecordIdentificationService';
 import { Ionicons } from '@expo/vector-icons';
 import { checkBackendHealth, initializeApiBaseUrl } from '../config/api';
 import { logger } from '../utils/logger';
+import { trackBetaEvent } from '../monitoring/telemetry';
 
 // Hooks
 import { useRecordIdentification, AlbumSuggestion } from '../hooks/useRecordIdentification';
@@ -46,6 +47,7 @@ export const ScanRecordScreen: React.FC<Props> = ({ navigation }) => {
   const identification = useRecordIdentification();
   const {
     identifying,
+    identifyingStage,
     result,
     suggestions,
     selectedSuggestion,
@@ -227,6 +229,15 @@ export const ScanRecordScreen: React.FC<Props> = ({ navigation }) => {
     setScanning(true);
   }, [cancelIdentification, clearResult, setCapturedUri, setScanning]);
 
+  const identifyingCopy =
+    identifyingStage === 'scanning'
+      ? 'Scanning cover...'
+      : identifyingStage === 'matching'
+      ? 'Matching album...'
+      : identifyingStage === 'confirming'
+      ? 'Confirming details...'
+      : 'Identifying album...';
+
   const handleSave = useCallback(async () => {
     if (!result) {
       logger.warn('[ScanRecord] ⚠️ handleSave called but no result');
@@ -275,11 +286,18 @@ export const ScanRecordScreen: React.FC<Props> = ({ navigation }) => {
       current: match,
       alternates: otherSuggestions,
     });
+    trackBetaEvent('identify_candidate_confirmed', {
+      source: suggestion.source ?? 'discogs',
+      confidence: suggestion.confidence,
+    });
     setSuggestions(null);
     selectSuggestion(null);
   }, [setResult, setSuggestions, selectSuggestion]);
 
   const handleEnterManually = useCallback((imageUri?: string) => {
+    trackBetaEvent('identify_manual_fallback_opened', {
+      hasImage: !!(imageUri || capturedUri),
+    });
     navigation.navigate('AddRecord', { 
       imageUri: imageUri || capturedUri || undefined,
     });
@@ -356,7 +374,7 @@ export const ScanRecordScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={colors.accent} />
             <AppText variant="body" style={{ marginTop: spacing.md, marginBottom: spacing.lg, textAlign: 'center' }}>
-              Identifying album...
+              {identifyingCopy}
             </AppText>
             <AppButton
               title="Cancel"

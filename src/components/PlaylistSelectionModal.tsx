@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppText } from './AppText';
 import { AppButton } from './AppButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import {
   getPlaylists,
   createPlaylist,
@@ -62,7 +63,7 @@ export const PlaylistSelectionModal: React.FC<PlaylistSelectionModalProps> = ({
       const allPlaylists = await getPlaylists();
       setPlaylists(allPlaylists);
     } catch (error) {
-      console.error('Failed to load playlists:', error);
+      logger.error('Failed to load playlists:', error);
       Alert.alert('Error', 'Could not load playlists.');
     } finally {
       setLoading(false);
@@ -84,7 +85,7 @@ export const PlaylistSelectionModal: React.FC<PlaylistSelectionModalProps> = ({
       onAdded?.();
       onClose();
     } catch (error) {
-      console.error('Failed to add to playlist:', error);
+      logger.error('Failed to add to playlist:', error);
       Alert.alert('Error', 'Could not add item to playlist.');
     }
   };
@@ -114,7 +115,7 @@ export const PlaylistSelectionModal: React.FC<PlaylistSelectionModalProps> = ({
       onAdded?.();
       onClose();
     } catch (error) {
-      console.error('Failed to create playlist:', error);
+      logger.error('Failed to create playlist:', error);
       Alert.alert('Error', 'Could not create playlist.');
     } finally {
       setCreating(false);

@@ -18,6 +18,7 @@
 
 import Constants from 'expo-constants';
 import { logger } from '../utils/logger';
+import { getAppEnv } from './appEnv';
 
 /**
  * Extracts host from Expo hostUri and builds backend URL
@@ -147,34 +148,55 @@ export const resolveApiBaseUrl = async (): Promise<string> => {
   resolutionPromise = (async () => {
     logger.debug('[API Config] 🔍 Resolving API base URL with health checks...');
     
-    // Build candidates in order: hostUri -> app.json -> process.env
     const candidates: Array<{ source: string; value: string }> = [];
-    
-    // 1. Infer from hostUri (multiple sources)
-    const hostUriSources = [
-      Constants.expoConfig?.hostUri,
-      Constants.manifest2?.extra?.expoClient?.hostUri,
-      (Constants as any).manifest?.hostUri, // Legacy format
-    ].filter(Boolean);
-    
-    for (const hostUri of hostUriSources) {
-      const inferred = inferBaseUrlFromHostUri(hostUri);
-      if (inferred && isValidUrlForPhysicalDevice(inferred)) {
-        candidates.push({ source: `hostUri (${hostUri})`, value: inferred });
-        break; // Use first valid hostUri
-      }
-    }
-    
-    // 2. app.json extra section
+    const appEnv = getAppEnv();
+
     const configUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL as string | undefined;
-    if (configUrl && isValidUrlForPhysicalDevice(configUrl)) {
-      candidates.push({ source: 'Constants.expoConfig.extra.EXPO_PUBLIC_API_BASE_URL', value: configUrl });
-    }
-    
-    // 3. process.env
-    const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-    if (envUrl && isValidUrlForPhysicalDevice(envUrl)) {
-      candidates.push({ source: 'process.env.EXPO_PUBLIC_API_BASE_URL', value: envUrl });
+    const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+
+    const pushExtra = () => {
+      if (configUrl?.trim() && isValidUrlForPhysicalDevice(configUrl.trim())) {
+        candidates.push({
+          source: 'Constants.expoConfig.extra.EXPO_PUBLIC_API_BASE_URL',
+          value: configUrl.trim(),
+        });
+      }
+    };
+    const pushEnv = () => {
+      if (envUrl && isValidUrlForPhysicalDevice(envUrl)) {
+        candidates.push({ source: 'process.env.EXPO_PUBLIC_API_BASE_URL', value: envUrl });
+      }
+    };
+    const pushHostUri = () => {
+      const hostUriSources = [
+        Constants.expoConfig?.hostUri,
+        Constants.manifest2?.extra?.expoClient?.hostUri,
+        (Constants as any).manifest?.hostUri,
+      ].filter(Boolean);
+
+      for (const hostUri of hostUriSources) {
+        const inferred = inferBaseUrlFromHostUri(hostUri);
+        if (inferred && isValidUrlForPhysicalDevice(inferred)) {
+          candidates.push({ source: `hostUri (${hostUri})`, value: inferred });
+          break;
+        }
+      }
+    };
+
+    // Order matters: first healthy candidate wins.
+    // Preview: EAS-baked URL must beat Expo hostUri (avoids wrong LAN :3000 when testing internal builds).
+    if (appEnv === 'preview') {
+      pushExtra();
+      pushEnv();
+      pushHostUri();
+    } else if (appEnv === 'production') {
+      logger.debug('[API Config] Production build — skipping hostUri inference (use EAS EXPO_PUBLIC_API_BASE_URL)');
+      pushExtra();
+      pushEnv();
+    } else {
+      pushHostUri();
+      pushExtra();
+      pushEnv();
     }
     
     // Log all candidates
@@ -199,18 +221,13 @@ To fix:
    Mac: System Settings > Network > Wi-Fi > Details > IP Address
    Or run: ifconfig | grep "inet " | grep -v 127.0.0.1
 
-2. Option A - Update app.json in the "extra" section:
-   "extra": {
-     "EXPO_PUBLIC_API_BASE_URL": "http://YOUR_IP:3000"
-   }
+2. Local dev: create a .env file with EXPO_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:3000
+   (or rely on Expo hostUri when running npx expo start on the same machine).
 
-3. Option B - Set environment variable:
-   export EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:3000
+3. EAS preview/production: set EXPO_PUBLIC_API_BASE_URL in eas.json env or EAS Secrets
+   (must be https for public App Store builds).
 
-4. Restart Expo (stop and run 'npx expo start --clear' again)
-
-Note: If using Expo dev client, the URL may be automatically
-inferred from the dev server's IP address (hostUri).
+4. Restart Expo with npx expo start --clear after changing env.
 
 ═══════════════════════════════════════════════════════════════
 `;
@@ -269,8 +286,13 @@ inferred from the dev server's IP address (hostUri).
     
     if (selectedBaseUrl) {
       logger.debug(`[API Config] ✅ Selected from ${selectedSource}: ${selectedBaseUrl} (priority ${selectedIndex + 1}/${candidates.length})`);
+      if (getAppEnv() === 'production' && selectedBaseUrl.startsWith('http://')) {
+        logger.warn(
+          '[API Config] Production profile using http:// API URL — prefer https:// for store builds.'
+        );
+      }
     }
-    
+
     if (!selectedBaseUrl) {
       const errorMessage = `
 ═══════════════════════════════════════════════════════════════

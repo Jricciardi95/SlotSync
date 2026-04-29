@@ -8,6 +8,8 @@
  */
 
 import { getApiUrl } from '../../config/api';
+import { logger } from '../../utils/logger';
+import { apiFetch } from '../../config/apiFetch';
 import { MusicBrainzRelease } from './types';
 
 /**
@@ -26,10 +28,10 @@ export async function searchMusicBrainzRelease(
   }
 
   try {
-    console.log(`[MusicBrainzClient] Searching for "${artist}" - "${title}"`);
+    logger.debug(`[MusicBrainzClient] Searching for "${artist}" - "${title}"`);
     
     const apiUrl = getApiUrl('/api/metadata/musicbrainz/search');
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,19 +43,19 @@ export async function searchMusicBrainzRelease(
     });
 
     if (!response.ok) {
-      console.warn(`[MusicBrainzClient] Search failed: ${response.status}`);
+      logger.warn(`[MusicBrainzClient] Search failed: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     
     if (!data.release) {
-      console.log(`[MusicBrainzClient] No release found`);
+      logger.debug(`[MusicBrainzClient] No release found`);
       return null;
     }
 
     const release = data.release;
-    console.log(`[MusicBrainzClient] ✅ Found release: ${release.mbid} - "${release.title}"`);
+    logger.debug(`[MusicBrainzClient] ✅ Found release: ${release.mbid} - "${release.title}"`);
 
     return {
       mbid: release.mbid,
@@ -64,7 +66,7 @@ export async function searchMusicBrainzRelease(
       country: release.country,
     };
   } catch (error) {
-    console.error(`[MusicBrainzClient] Error searching MusicBrainz:`, error);
+    logger.error(`[MusicBrainzClient] Error searching MusicBrainz:`, error);
     return null;
   }
 }
@@ -92,10 +94,10 @@ export async function getMusicBrainzReleaseDetails(mbid: string): Promise<{
   }
 
   try {
-    console.log(`[MusicBrainzClient] Fetching release details: ${mbid}`);
+    logger.debug(`[MusicBrainzClient] Fetching release details: ${mbid}`);
     
     const apiUrl = getApiUrl(`/api/metadata/musicbrainz/release/${mbid}`);
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -103,14 +105,14 @@ export async function getMusicBrainzReleaseDetails(mbid: string): Promise<{
     });
 
     if (!response.ok) {
-      console.warn(`[MusicBrainzClient] Failed to fetch release ${mbid}: ${response.status}`);
+      logger.warn(`[MusicBrainzClient] Failed to fetch release ${mbid}: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error(`[MusicBrainzClient] Error fetching release details:`, error);
+    logger.error(`[MusicBrainzClient] Error fetching release details:`, error);
     return null;
   }
 }
@@ -126,7 +128,7 @@ export async function getMusicBrainzReleaseDetails(mbid: string): Promise<{
 export async function findMusicBrainzIdFromDiscogs(discogsId: number): Promise<string | null> {
   try {
     const apiUrl = getApiUrl(`/api/metadata/musicbrainz/from-discogs/${discogsId}`);
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -140,7 +142,7 @@ export async function findMusicBrainzIdFromDiscogs(discogsId: number): Promise<s
     const data = await response.json();
     return data.mbid || null;
   } catch (error) {
-    console.error(`[MusicBrainzClient] Error finding MBID from Discogs:`, error);
+    logger.error(`[MusicBrainzClient] Error finding MBID from Discogs:`, error);
     return null;
   }
 }

@@ -175,10 +175,6 @@ const {
 const { logFeedback, getFeedback, initFeedbackRepository } = require('./services/feedbackRepository');
 const { similarityScore, normalizeForSearch, levenshteinDistance } = require('./services/similarityUtils');
 
-// GPT REMOVED – not used in core SlotSync backend
-// const gpt4Vision = require('./services/gpt4Vision');
-// const vinylVision = require('./services/analyzeAlbumCover');
-// const vinylVisionBatch = require('./services/analyzeAlbumBatch');
 // const imageEmbedding = require('./services/imageEmbedding');
 // const embeddingDatabase = require('./services/embeddingDatabase');
 
@@ -650,9 +646,12 @@ logger.info(`[Config] ⚙️  New dual thresholds: AUTO_ACCEPT=${AUTO_ACCEPT_THR
 // Middleware: Rate Limiting
 // ============================================================================
 const { apiLimiter, identifyRecordLimiter } = require('./middleware/rateLimit');
+const { slotsyncApiKey } = require('./middleware/apiKey');
 
 // Apply general API limiter to all /api/ routes
 app.use('/api/', apiLimiter);
+// Optional shared key for private beta (no-op if SLOTSYNC_API_KEY unset)
+app.use('/api/', slotsyncApiKey);
 
 // ============================================================================
 // Middleware: CORS Configuration

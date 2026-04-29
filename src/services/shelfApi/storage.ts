@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SHELF_BASE_URL_STORAGE_KEY,
   SHELF_ENV_BASE_URL,
+  SHELF_AUTO_HIGHLIGHT_STORAGE_KEY,
 } from '../../config/shelfConfig';
 
 /**
@@ -56,6 +57,17 @@ export async function setStoredShelfBaseUrl(url: string): Promise<void> {
 
 export async function clearStoredShelfBaseUrl(): Promise<void> {
   await AsyncStorage.removeItem(SHELF_BASE_URL_STORAGE_KEY);
+}
+
+/** Default ON — user can disable to stop auto LED when opening album detail */
+export async function getShelfAutoHighlightEnabled(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(SHELF_AUTO_HIGHLIGHT_STORAGE_KEY);
+  if (v === null) return true;
+  return v === '1';
+}
+
+export async function setShelfAutoHighlightEnabled(on: boolean): Promise<void> {
+  await AsyncStorage.setItem(SHELF_AUTO_HIGHLIGHT_STORAGE_KEY, on ? '1' : '0');
 }
 
 /**

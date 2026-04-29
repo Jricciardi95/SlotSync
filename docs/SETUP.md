@@ -19,9 +19,9 @@ npx expo start
 
 ### Point the app at your backend
 
-The app resolves the API base URL from `src/config/api.ts` (dev helpers, persisted URL, env). For a phone on the same LAN as your Mac, use your Mac’s IP (not `localhost`).
+Configuration is merged in **`app.config.js`** (see **`.env.example`**). Local dev: copy `.env.example` → `.env` and set `EXPO_PUBLIC_API_BASE_URL` to your machine’s LAN IP and port (not `localhost` on a physical phone).
 
-Optional: set `EXPO_PUBLIC_API_BASE_URL` in `.env` or `app.json` `extra` if your project is wired for it.
+Resolution logic lives in **`src/config/api.ts`**: Expo **hostUri** inference (skipped in **`EXPO_PUBLIC_APP_ENV=production`** store builds), then `extra` / env. **Production / EAS** builds must inject **`EXPO_PUBLIC_API_BASE_URL`** (ideally **HTTPS**) via EAS env or secrets — see **`docs/BETA_LAUNCH.md`**.
 
 ### Smart shelf URL (optional)
 

@@ -21,6 +21,7 @@ import {
   SlotWithAssignment,
 } from './types';
 import { generateId } from '../utils/id';
+import { logger } from '../utils/logger';
 import { normalizeText } from '../utils/normalizeText';
 
 const now = () => new Date().toISOString();
@@ -1444,7 +1445,7 @@ export const findRecordByImageHash = async (
   // Get tracks
   const tracks = await getTracksByRecord(record.id);
 
-  console.log(`[Repository] ✅ Found cached record by hash: "${record.artist}" - "${record.title}"`);
+  logger.debug(`[Repository] ✅ Found cached record by hash: "${record.artist}" - "${record.title}"`);
   
   return {
     ...record,
@@ -1468,12 +1469,12 @@ export const saveImageHash = async (
   submittedImageUri?: string | null
 ): Promise<void> => {
   if (!imageHash || imageHash.trim().length === 0) {
-    console.warn('[Repository] Cannot save empty image hash');
+    logger.warn('[Repository] Cannot save empty image hash');
     return;
   }
 
   if (!recordId) {
-    console.warn('[Repository] Cannot save image hash without recordId');
+    logger.warn('[Repository] Cannot save image hash without recordId');
     return;
   }
 
@@ -1493,9 +1494,9 @@ export const saveImageHash = async (
       timestamp
     );
 
-    console.log(`[Repository] ✅ Saved image hash ${imageHash.substring(0, 8)}... for record ${recordId}`);
+    logger.debug(`[Repository] ✅ Saved image hash ${imageHash.substring(0, 8)}... for record ${recordId}`);
   } catch (error) {
-    console.error('[Repository] Error saving image hash:', error);
+    logger.error('[Repository] Error saving image hash:', error);
     // Don't throw - hash saving is not critical
   }
 };

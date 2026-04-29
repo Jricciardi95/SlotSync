@@ -17,6 +17,7 @@ import {
   ScanResult,
 } from '../services/RecordIdentificationService';
 import { logger } from '../utils/logger';
+import { trackBetaEvent } from '../monitoring/telemetry';
 
 export type AlbumSuggestion = {
   artist: string;
@@ -45,6 +46,7 @@ export interface UseRecordIdentificationReturn {
   suggestions: SuggestionsState;
   selectedSuggestion: AlbumSuggestion | null;
   capturedUri: string | null;
+  identifyingStage: 'scanning' | 'matching' | 'confirming' | null;
   
   // Actions
   identifyFromImage: (uri: string) => Promise<void>;
@@ -65,6 +67,7 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
   const [suggestions, setSuggestions] = useState<SuggestionsState>(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState<AlbumSuggestion | null>(null);
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [identifyingStage, setIdentifyingStage] = useState<'scanning' | 'matching' | 'confirming' | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const cancelIdentification = useCallback(() => {
@@ -73,6 +76,7 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
       abortControllerRef.current = null;
     }
     setIdentifying(false);
+    setIdentifyingStage(null);
   }, []);
 
   const clearResult = useCallback(() => {
@@ -80,14 +84,20 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
     setSuggestions(null);
     setSelectedSuggestion(null);
     setCapturedUri(null);
+    setIdentifyingStage(null);
   }, []);
 
   const identifyFromImage = useCallback(async (uri: string) => {
     setCapturedUri(uri);
     setIdentifying(true);
+    setIdentifyingStage('scanning');
+    const startedAt = Date.now();
+    trackBetaEvent('identify_started', { mode: 'image' });
 
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
+    const phase1 = setTimeout(() => setIdentifyingStage('matching'), 700);
+    const phase2 = setTimeout(() => setIdentifyingStage('confirming'), 1800);
 
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -114,11 +124,20 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
       // Normalize response into ScanResult structure
       const normalizedResult = normalizeScanResult(response);
       setResult(normalizedResult);
+      setIdentifyingStage('confirming');
+      trackBetaEvent('identify_succeeded', {
+        mode: 'image',
+        durationMs: Date.now() - startedAt,
+        source: normalizedResult.current.source ?? 'unknown',
+        confidence: normalizedResult.current.confidence ?? null,
+      });
       abortControllerRef.current = null;
     } catch (error: any) {
       // Don't show error if request was aborted
       if (abortControllerRef.current?.signal.aborted) {
         setIdentifying(false);
+        clearTimeout(phase1);
+        clearTimeout(phase2);
         return;
       }
       
@@ -139,6 +158,11 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
             albumSuggestions: albumSuggestions,
             extractedText: error.extractedText,
           });
+          trackBetaEvent('identify_uncertain', {
+            mode: 'image',
+            durationMs: Date.now() - startedAt,
+            suggestionsCount: albumSuggestions.length,
+          });
           setIdentifying(false);
           return;
         }
@@ -156,12 +180,22 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
             })),
             extractedText: error.extractedText,
           });
+          trackBetaEvent('identify_uncertain', {
+            mode: 'image',
+            durationMs: Date.now() - startedAt,
+            suggestionsCount: validCandidates.length,
+          });
           setIdentifying(false);
           return;
         }
         
         // No valid album candidates: skip suggestions UI and go straight to manual entry
         logger.debug(`[useRecordIdentification] Low confidence but no valid album candidates - showing manual entry prompt`);
+        trackBetaEvent('identify_failed', {
+          mode: 'image',
+          durationMs: Date.now() - startedAt,
+          reason: 'low_confidence_no_candidates',
+        });
         setIdentifying(false);
         // Return error so caller can handle navigation
         throw error;
@@ -180,6 +214,11 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
         hasCandidates: !!error.candidates,
         candidatesCount: error.candidates?.length || 0,
         hasExtractedText: !!error.extractedText,
+      });
+      trackBetaEvent('identify_failed', {
+        mode: 'image',
+        durationMs: Date.now() - startedAt,
+        reason: errorCode,
       });
       
       // PR6: Store error state for retry UI
@@ -213,24 +252,42 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
       // PR6: Non-retryable errors - re-throw for caller to guide to manual flow
       throw error;
     } finally {
+      clearTimeout(phase1);
+      clearTimeout(phase2);
       setIdentifying(false);
+      setIdentifyingStage(null);
       abortControllerRef.current = null;
     }
   }, []);
 
   const identifyFromBarcode = useCallback(async (barcode: string) => {
     setIdentifying(true);
+    setIdentifyingStage('matching');
+    const startedAt = Date.now();
+    trackBetaEvent('identify_started', { mode: 'barcode' });
     
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const response = await identifyRecordByBarcode(barcode);
       const normalizedResult = normalizeScanResult(response);
       setResult(normalizedResult);
+      trackBetaEvent('identify_succeeded', {
+        mode: 'barcode',
+        durationMs: Date.now() - startedAt,
+        source: normalizedResult.current.source ?? 'barcode',
+        confidence: normalizedResult.current.confidence ?? null,
+      });
     } catch (error: any) {
       logger.error('[useRecordIdentification] Barcode identification failed', error);
+      trackBetaEvent('identify_failed', {
+        mode: 'barcode',
+        durationMs: Date.now() - startedAt,
+        reason: error?.code ?? 'unknown',
+      });
       throw error;
     } finally {
       setIdentifying(false);
+      setIdentifyingStage(null);
     }
   }, []);
 
@@ -275,6 +332,7 @@ export function useRecordIdentification(): UseRecordIdentificationReturn {
     suggestions,
     selectedSuggestion,
     capturedUri,
+    identifyingStage,
     
     // Actions
     identifyFromImage,

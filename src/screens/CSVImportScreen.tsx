@@ -17,6 +17,7 @@ import { useTheme } from '../hooks/useTheme';
 import { LibraryStackParamList } from '../navigation/types';
 import * as FileSystem from 'expo-file-system/legacy';
 import { importCsvRowsWithEnrichment, CsvRow } from '../utils/csvImport';
+import { logger } from '../utils/logger';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'CSVImport'>;
 
@@ -127,49 +128,49 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
 
       setMapping(autoMapping);
     } catch (error) {
-      console.error('File selection failed', error);
+      logger.error('File selection failed', error);
       Alert.alert('Error', 'Could not read CSV file.');
     }
   };
 
   const handleImport = async () => {
-    console.log(`[CSV Import] ========================================`);
-    console.log(`[CSV Import] 🎬 handleImport() CALLED`);
-    console.log(`[CSV Import] 📋 Current mapping:`, mapping);
+    logger.debug(`[CSV Import] ========================================`);
+    logger.debug(`[CSV Import] 🎬 handleImport() CALLED`);
+    logger.debug(`[CSV Import] 📋 Current mapping:`, mapping);
     
     if (!mapping.artist || !mapping.title) {
-      console.error(`[CSV Import] ❌ Missing mapping: artist="${mapping.artist}", title="${mapping.title}"`);
+      logger.error(`[CSV Import] ❌ Missing mapping: artist="${mapping.artist}", title="${mapping.title}"`);
       Alert.alert('Missing mapping', 'Artist and Title columns are required.');
       return;
     }
 
-    console.log(`[CSV Import] ✅ Mapping valid, starting import...`);
+    logger.debug(`[CSV Import] ✅ Mapping valid, starting import...`);
     setImporting(true);
     setImportedCount(0);
     setSkippedCount(0);
 
     try {
-      console.log(`[CSV Import] 📂 Opening document picker...`);
+      logger.debug(`[CSV Import] 📂 Opening document picker...`);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'text/csv',
         copyToCacheDirectory: true,
       });
 
-      console.log(`[CSV Import] 📂 Document picker result:`, { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
+      logger.debug(`[CSV Import] 📂 Document picker result:`, { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
 
       if (result.canceled || !result.assets?.[0]) {
-        console.log(`[CSV Import] ⏭️  User canceled or no file selected`);
+        logger.debug(`[CSV Import] ⏭️  User canceled or no file selected`);
         setImporting(false);
         return;
       }
 
       const fileUri = result.assets[0].uri;
-      console.log(`[CSV Import] 📄 Reading file from: ${fileUri}`);
+      logger.debug(`[CSV Import] 📄 Reading file from: ${fileUri}`);
       const fileContent = await FileSystem.readAsStringAsync(fileUri);
-      console.log(`[CSV Import] 📄 File content length: ${fileContent.length} characters`);
+      logger.debug(`[CSV Import] 📄 File content length: ${fileContent.length} characters`);
       
       const lines = parseCSV(fileContent);
-      console.log(`[CSV Import] 📊 Parsed ${lines.length} lines from CSV`);
+      logger.debug(`[CSV Import] 📊 Parsed ${lines.length} lines from CSV`);
 
       if (lines.length < 2) {
         Alert.alert('Error', 'CSV file has no data rows.');
@@ -180,11 +181,11 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
       const headers = lines[0];
       const dataRows = lines.slice(1);
 
-      console.log(`[CSV Import] ========================================`);
-      console.log(`[CSV Import] 🚀 STARTING CSV IMPORT`);
-      console.log(`[CSV Import] 📊 Total rows to process: ${dataRows.length}`);
-      console.log(`[CSV Import] 📋 Headers:`, headers);
-      console.log(`[CSV Import] ========================================`);
+      logger.debug(`[CSV Import] ========================================`);
+      logger.debug(`[CSV Import] 🚀 STARTING CSV IMPORT`);
+      logger.debug(`[CSV Import] 📊 Total rows to process: ${dataRows.length}`);
+      logger.debug(`[CSV Import] 📋 Headers:`, headers);
+      logger.debug(`[CSV Import] ========================================`);
 
       const artistIdx = headers.indexOf(mapping.artist);
       const titleIdx = headers.indexOf(mapping.title);
@@ -193,7 +194,7 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
       const barcodeIdx = mapping.barcode ? headers.indexOf(mapping.barcode) : -1;
       const releaseIdIdx = mapping.releaseId ? headers.indexOf(mapping.releaseId) : -1;
 
-      console.log(`[CSV Import] 📍 Column indices: artist=${artistIdx}, title=${titleIdx}, year=${yearIdx}, releaseId=${releaseIdIdx}`);
+      logger.debug(`[CSV Import] 📍 Column indices: artist=${artistIdx}, title=${titleIdx}, year=${yearIdx}, releaseId=${releaseIdIdx}`);
 
       // Parse rows into CsvRow format
       const csvRows: CsvRow[] = [];
@@ -264,9 +265,9 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
 
       // Log failures for debugging
       if (importResult.failures.length > 0) {
-        console.warn(`[CSV Import] ⚠️  ${importResult.failures.length} rows failed:`);
+        logger.warn(`[CSV Import] ⚠️  ${importResult.failures.length} rows failed:`);
         for (const failure of importResult.failures) {
-          console.warn(`[CSV Import]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
+          logger.warn(`[CSV Import]   - Row ${failure.rowIndex + 1}: "${failure.artist}" - "${failure.title}": ${failure.error}`);
         }
       }
 
@@ -274,9 +275,9 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
       setImportedCount(imported);
       setSkippedCount(skipped);
 
-      console.log(`[CSV Import] ========================================`);
-      console.log(`[CSV Import] ✅ IMPORT COMPLETE: ${imported} imported, ${skipped} skipped`);
-      console.log(`[CSV Import] ========================================`);
+      logger.debug(`[CSV Import] ========================================`);
+      logger.debug(`[CSV Import] ✅ IMPORT COMPLETE: ${imported} imported, ${skipped} skipped`);
+      logger.debug(`[CSV Import] ========================================`);
       
       Alert.alert(
         'Import Complete',
@@ -284,15 +285,15 @@ export const CSVImportScreen: React.FC<Props> = ({ navigation }) => {
         [{ text: 'OK', onPress: () => navigation.navigate('LibraryHome') }]
       );
     } catch (error: any) {
-      console.error(`[CSV Import] ========================================`);
-      console.error(`[CSV Import] ❌ IMPORT FAILED:`, error);
-      console.error(`[CSV Import] ❌ Error type: ${error?.name}`);
-      console.error(`[CSV Import] ❌ Error message: ${error?.message}`);
-      console.error(`[CSV Import] ❌ Error stack:`, error?.stack?.substring(0, 500));
-      console.error(`[CSV Import] ========================================`);
+      logger.error(`[CSV Import] ========================================`);
+      logger.error(`[CSV Import] ❌ IMPORT FAILED:`, error);
+      logger.error(`[CSV Import] ❌ Error type: ${error?.name}`);
+      logger.error(`[CSV Import] ❌ Error message: ${error?.message}`);
+      logger.error(`[CSV Import] ❌ Error stack:`, error?.stack?.substring(0, 500));
+      logger.error(`[CSV Import] ========================================`);
       Alert.alert('Error', `Could not import CSV file: ${error?.message || 'Unknown error'}`);
     } finally {
-      console.log(`[CSV Import] 🏁 Setting importing=false`);
+      logger.debug(`[CSV Import] 🏁 Setting importing=false`);
       setImporting(false);
     }
   };

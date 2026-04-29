@@ -16,6 +16,7 @@ import { AppText } from '../components/AppText';
 import { AppButton } from '../components/AppButton';
 import { AppIconButton } from '../components/AppIconButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import {
   getRecordById,
   getTracksByRecord,
@@ -37,7 +38,7 @@ export const EditRecordScreen: React.FC<Props> = ({ route, navigation }) => {
   // Use useEffect to navigate (can't call navigation during render)
   useEffect(() => {
     if (!recordId) {
-      console.error('[EditRecord] Missing recordId in route params, navigating back');
+      logger.error('[EditRecord] Missing recordId in route params, navigating back');
       // Navigate back if we can, otherwise go to LibraryHome
       if (navigation.canGoBack && navigation.canGoBack()) {
         navigation.goBack();
@@ -95,13 +96,13 @@ export const EditRecordScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[EditRecord] useFocusEffect triggered, loading record', recordId);
+      logger.debug('[EditRecord] useFocusEffect triggered, loading record', recordId);
       load();
     }, [load, recordId])
   );
 
   const handleSave = async () => {
-    console.log('[EditFlow] Save pressed for album', recordId);
+    logger.debug('[EditFlow] Save pressed for album', recordId);
     if (!artist.trim() || !title.trim()) {
       Alert.alert('Error', 'Artist and title are required.');
       return;
@@ -152,17 +153,17 @@ export const EditRecordScreen: React.FC<Props> = ({ route, navigation }) => {
 
       // Success - use goBack() to return to the previous screen (RecordDetailScreen)
       // This maintains the correct navigation stack: ListScreen → RecordDetailScreen → EditRecordScreen → (back) RecordDetailScreen
-      console.log('[EditFlow] Save completed, going back to detail screen');
+      logger.debug('[EditFlow] Save completed, going back to detail screen');
       if (navigation.canGoBack()) {
         navigation.goBack();
       } else {
         // Fallback: if we can't go back, navigate to detail screen
         // This should rarely happen, but prevents getting stuck
-        console.warn('[EditFlow] Cannot go back, navigating to RecordDetail');
+        logger.warn('[EditFlow] Cannot go back, navigating to RecordDetail');
         navigation.navigate('RecordDetail', { recordId });
       }
     } catch (error) {
-      console.error('Failed to save record:', error);
+      logger.error('Failed to save record:', error);
       Alert.alert('Error', 'Could not save changes.');
     } finally {
       // CRITICAL: Always ensure saving state is cleared
@@ -188,7 +189,7 @@ export const EditRecordScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Full-screen spinner for EditRecordScreen, controlled by loading state
   if (loading && !record) {
-    console.log('[Spinner] EditRecordScreen loading - initial load');
+    logger.debug('[Spinner] EditRecordScreen loading - initial load');
     return (
       <AppScreen title="Edit Album" scroll={false}>
         <View style={styles.centerContent}>
@@ -370,12 +371,12 @@ export const EditRecordScreen: React.FC<Props> = ({ route, navigation }) => {
           variant="secondary"
           onPress={() => {
             // Cancel - use goBack() to return to the previous screen (RecordDetailScreen)
-            console.log('[EditFlow] Cancel pressed, going back');
+            logger.debug('[EditFlow] Cancel pressed, going back');
             if (navigation.canGoBack()) {
               navigation.goBack();
             } else {
               // Fallback: if we can't go back, navigate to detail screen
-              console.warn('[EditFlow] Cannot go back, navigating to RecordDetail');
+              logger.warn('[EditFlow] Cannot go back, navigating to RecordDetail');
               navigation.navigate('RecordDetail', { recordId });
             }
           }}

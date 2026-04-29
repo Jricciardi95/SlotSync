@@ -7,6 +7,7 @@ import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
 import { AppIconButton } from '../components/AppIconButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import { LibraryStackParamList } from '../navigation/types';
 import { getRecordsByTrackTitle } from '../data/repository';
 import { RecordModel } from '../data/types';
@@ -86,7 +87,7 @@ export const SongDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   // Get returnToTab from route params (passed from LibraryScreen when navigating to SongDetail)
                   // If not available, default to 'SONGS' as fallback
                   const returnToTab = (route.params as any)?.returnToTab || 'SONGS';
-                  console.log('[SongDetail] Navigating to RecordDetail, returnToTab:', returnToTab);
+                  logger.verbose('[SongDetail] Navigating to RecordDetail, returnToTab:', returnToTab);
                   navigation.navigate('RecordDetail', { 
                     recordId: item.id,
                     returnToTab: returnToTab, // Use the tab we came from (SONGS or ALL)

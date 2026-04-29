@@ -8,6 +8,8 @@
  */
 
 import { getApiUrl } from '../../config/api';
+import { logger } from '../../utils/logger';
+import { apiFetch } from '../../config/apiFetch';
 import { DiscogsSearchResult } from './types';
 import { IdentificationCandidate } from '../vision/types';
 
@@ -178,14 +180,14 @@ export async function searchDiscogs(
   const queries = generateDiscogsQueries(candidate);
   const queriesToTry = queries.slice(0, maxQueries);
 
-  console.log(`[DiscogsClient] Searching for "${candidate.artist}" - "${candidate.album}"`);
-  console.log(`[DiscogsClient] Trying ${queriesToTry.length} query variants`);
+  logger.debug(`[DiscogsClient] Searching for "${candidate.artist}" - "${candidate.album}"`);
+  logger.debug(`[DiscogsClient] Trying ${queriesToTry.length} query variants`);
 
   // Call backend endpoint that proxies to Discogs
   // The backend handles the actual Discogs API calls
   try {
     const apiUrl = getApiUrl('/api/metadata/discogs/search');
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -199,14 +201,14 @@ export async function searchDiscogs(
     });
 
     if (!response.ok) {
-      console.warn(`[DiscogsClient] Search failed: ${response.status}`);
+      logger.warn(`[DiscogsClient] Search failed: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     
     if (!data.results || data.results.length === 0) {
-      console.log(`[DiscogsClient] No results found`);
+      logger.debug(`[DiscogsClient] No results found`);
       return null;
     }
 
@@ -217,12 +219,12 @@ export async function searchDiscogs(
       .sort((a: any, b: any) => (b.similarity || 0) - (a.similarity || 0));
 
     if (validResults.length === 0) {
-      console.log(`[DiscogsClient] No valid results after filtering`);
+      logger.debug(`[DiscogsClient] No valid results after filtering`);
       return null;
     }
 
     const bestMatch = validResults[0];
-    console.log(`[DiscogsClient] ✅ Found match: "${bestMatch.artist}" - "${bestMatch.title}" (similarity: ${bestMatch.similarity?.toFixed(3)})`);
+    logger.debug(`[DiscogsClient] ✅ Found match: "${bestMatch.artist}" - "${bestMatch.title}" (similarity: ${bestMatch.similarity?.toFixed(3)})`);
 
     return {
       id: bestMatch.id,
@@ -234,7 +236,7 @@ export async function searchDiscogs(
       similarity: bestMatch.similarity || 0.5,
     };
   } catch (error) {
-    console.error(`[DiscogsClient] Error searching Discogs:`, error);
+    logger.error(`[DiscogsClient] Error searching Discogs:`, error);
     return null;
   }
 }
@@ -263,7 +265,7 @@ export async function getDiscogsRelease(discogsId: number): Promise<{
 } | null> {
   try {
     const apiUrl = getApiUrl(`/api/discogs/release/${discogsId}`);
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -271,14 +273,14 @@ export async function getDiscogsRelease(discogsId: number): Promise<{
     });
 
     if (!response.ok) {
-      console.warn(`[DiscogsClient] Failed to fetch release ${discogsId}: ${response.status}`);
+      logger.warn(`[DiscogsClient] Failed to fetch release ${discogsId}: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error(`[DiscogsClient] Error fetching release:`, error);
+    logger.error(`[DiscogsClient] Error fetching release:`, error);
     return null;
   }
 }

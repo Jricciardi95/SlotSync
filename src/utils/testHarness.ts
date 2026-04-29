@@ -10,6 +10,7 @@
 
 import { identifyAlbumFromImage } from '../services/identification/orchestrator';
 import { DEBUG_IDENTIFICATION } from './debug';
+import { logger } from './logger';
 
 /**
  * Test cases for hard-to-identify albums
@@ -51,12 +52,12 @@ export async function testIdentification(
 }> {
   const startTime = Date.now();
   
-  console.log('='.repeat(60));
-  console.log(`🧪 TEST HARNESS: ${testName || 'Unknown Test'}`);
-  console.log('='.repeat(60));
-  console.log(`Image: ${imageUri}`);
-  console.log(`Debug mode: ${DEBUG_IDENTIFICATION ? 'ON' : 'OFF'}`);
-  console.log('');
+  logger.debug('='.repeat(60));
+  logger.debug(`🧪 TEST HARNESS: ${testName || 'Unknown Test'}`);
+  logger.debug('='.repeat(60));
+  logger.debug(`Image: ${imageUri}`);
+  logger.debug(`Debug mode: ${DEBUG_IDENTIFICATION ? 'ON' : 'OFF'}`);
+  logger.debug('');
 
   try {
     const result = await identifyAlbumFromImage(imageUri, {
@@ -68,27 +69,27 @@ export async function testIdentification(
 
     const totalTime = Date.now() - startTime;
 
-    console.log('');
-    console.log('='.repeat(60));
-    console.log('📊 TEST RESULTS');
-    console.log('='.repeat(60));
-    console.log(`✅ Success: ${result ? 'YES' : 'NO'}`);
+    logger.debug('');
+    logger.debug('='.repeat(60));
+    logger.debug('📊 TEST RESULTS');
+    logger.debug('='.repeat(60));
+    logger.debug(`✅ Success: ${result ? 'YES' : 'NO'}`);
     
     if (result) {
-      console.log(`Artist: ${result.album.artist}`);
-      console.log(`Album: ${result.album.albumTitle}`);
-      console.log(`Year: ${result.album.releaseYear || 'N/A'}`);
-      console.log(`Confidence: ${result.album.confidence.toFixed(3)}`);
-      console.log(`From Cache: ${result.fromCache ? 'YES' : 'NO'}`);
-      console.log(`Candidates Used: ${result.sourceCandidates.length}`);
-      console.log(`Tracks: ${result.album.tracks.length}`);
-      console.log(`Discogs ID: ${result.album.discogsId || 'N/A'}`);
-      console.log(`MusicBrainz ID: ${result.album.musicbrainzId || 'N/A'}`);
-      console.log(`Cover Art: ${result.album.coverHdUrl ? 'SET' : 'NULL'}`);
+      logger.debug(`Artist: ${result.album.artist}`);
+      logger.debug(`Album: ${result.album.albumTitle}`);
+      logger.debug(`Year: ${result.album.releaseYear || 'N/A'}`);
+      logger.debug(`Confidence: ${result.album.confidence.toFixed(3)}`);
+      logger.debug(`From Cache: ${result.fromCache ? 'YES' : 'NO'}`);
+      logger.debug(`Candidates Used: ${result.sourceCandidates.length}`);
+      logger.debug(`Tracks: ${result.album.tracks.length}`);
+      logger.debug(`Discogs ID: ${result.album.discogsId || 'N/A'}`);
+      logger.debug(`MusicBrainz ID: ${result.album.musicbrainzId || 'N/A'}`);
+      logger.debug(`Cover Art: ${result.album.coverHdUrl ? 'SET' : 'NULL'}`);
     }
     
-    console.log(`Total Time: ${totalTime}ms`);
-    console.log('='.repeat(60));
+    logger.debug(`Total Time: ${totalTime}ms`);
+    logger.debug('='.repeat(60));
 
     return {
       success: !!result,
@@ -102,24 +103,24 @@ export async function testIdentification(
   } catch (error: any) {
     const totalTime = Date.now() - startTime;
     
-    console.log('');
-    console.log('='.repeat(60));
-    console.log('❌ TEST FAILED');
-    console.log('='.repeat(60));
-    console.log(`Error: ${error.message || error}`);
-    console.log(`Code: ${error.code || 'UNKNOWN'}`);
+    logger.debug('');
+    logger.debug('='.repeat(60));
+    logger.debug('❌ TEST FAILED');
+    logger.debug('='.repeat(60));
+    logger.debug(`Error: ${error.message || error}`);
+    logger.debug(`Code: ${error.code || 'UNKNOWN'}`);
     if (error.candidates) {
-      console.log(`Candidates Found: ${error.candidates.length}`);
-      console.log('Top candidates:');
+      logger.debug(`Candidates Found: ${error.candidates.length}`);
+      logger.debug('Top candidates:');
       error.candidates.slice(0, 5).forEach((c: any, i: number) => {
-        console.log(`  ${i + 1}. ${c.artist} - ${c.title || c.album} (${c.confidence?.toFixed(3) || 'N/A'})`);
+        logger.debug(`  ${i + 1}. ${c.artist} - ${c.title || c.album} (${c.confidence?.toFixed(3) || 'N/A'})`);
       });
     }
     if (error.extractedText) {
-      console.log(`Extracted Text: ${error.extractedText.substring(0, 200)}...`);
+      logger.debug(`Extracted Text: ${error.extractedText.substring(0, 200)}...`);
     }
-    console.log(`Total Time: ${totalTime}ms`);
-    console.log('='.repeat(60));
+    logger.debug(`Total Time: ${totalTime}ms`);
+    logger.debug('='.repeat(60));
 
     return {
       success: false,
@@ -138,8 +139,8 @@ export async function testIdentification(
  * Run all test cases (if test images are available)
  */
 export async function runAllTests(testImages: Record<string, string>): Promise<void> {
-  console.log('🧪 Running all test cases...');
-  console.log('');
+  logger.debug('🧪 Running all test cases...');
+  logger.debug('');
 
   const results: Array<{ name: string; success: boolean }> = [];
 
@@ -151,14 +152,14 @@ export async function runAllTests(testImages: Record<string, string>): Promise<v
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
-  console.log('');
-  console.log('='.repeat(60));
-  console.log('📈 TEST SUMMARY');
-  console.log('='.repeat(60));
+  logger.debug('');
+  logger.debug('='.repeat(60));
+  logger.debug('📈 TEST SUMMARY');
+  logger.debug('='.repeat(60));
   results.forEach((r, i) => {
-    console.log(`${i + 1}. ${r.name}: ${r.success ? '✅ PASS' : '❌ FAIL'}`);
+    logger.debug(`${i + 1}. ${r.name}: ${r.success ? '✅ PASS' : '❌ FAIL'}`);
   });
-  console.log(`Total: ${results.length} tests, ${results.filter(r => r.success).length} passed`);
-  console.log('='.repeat(60));
+  logger.debug(`Total: ${results.length} tests, ${results.filter(r => r.success).length} passed`);
+  logger.debug('='.repeat(60));
 }
 

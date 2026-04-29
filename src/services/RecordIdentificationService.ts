@@ -9,6 +9,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiUrl, API_CONFIG } from '../config/api';
+import { apiFetch } from '../config/apiFetch';
 import { identifyAlbumFromImage } from './identification/orchestrator';
 import { saveResolvedAlbum } from './db';
 import { generateImageHash } from '../utils/imageHash';
@@ -175,16 +176,17 @@ export const identifyRecordByBarcode = async (
       if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
         logger.error(`[RecordIdentification] ❌ ERROR: URL contains localhost/127.0.0.1!`);
         logger.error(`[RecordIdentification] ❌ This will NOT work on physical devices!`);
-        logger.error(`[RecordIdentification] ❌ Set EXPO_PUBLIC_API_BASE_URL to your computer's LAN IP`);
+        logger.error(`[RecordIdentification] ❌ Set EXPO_PUBLIC_API_BASE_URL to staging HTTPS or LAN server`);
         throw {
           code: 'NETWORK_ERROR' as const,
-          message: 'API URL contains localhost. Physical devices cannot reach localhost. Set EXPO_PUBLIC_API_BASE_URL to your computer\'s LAN IP address (e.g., http://192.168.1.100:3000)',
+          message:
+            'API URL contains localhost — physical devices cannot reach it. Set EXPO_PUBLIC_API_BASE_URL to your staging server or LAN IP (see .env.example and docs/STAGING_CHECKLIST.md).',
         } as IdentificationError;
       }
       
       logger.debug(`[RecordIdentification] ========================================`);
 
-      const response = await fetch(apiUrl, {
+      const response = await apiFetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -344,7 +346,7 @@ export const testApiConnectivity = async (): Promise<boolean> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for ping
     
-    const response = await fetch(pingUrl, {
+    const response = await apiFetch(pingUrl, {
       method: 'GET',
       signal: controller.signal,
     });
@@ -531,7 +533,7 @@ export const identifyRecordByText = async (
       logger.debug(`[RecordIdentification] Looking up by text: "${artist}" - "${title}"`);
       logger.debug(`[RecordIdentification] Using endpoint: ${apiUrl}`);
       
-      const response = await fetch(apiUrl, {
+      const response = await apiFetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -9,6 +9,7 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
+import { logger } from './logger';
 
 export interface ConvertToJpegOptions {
   maxWidth?: number;
@@ -38,8 +39,8 @@ export const convertToJpeg = async (
   } = options;
 
   try {
-    console.log(`[ImageConverter] Converting image to JPEG: ${imageUri}`);
-    console.log(`[ImageConverter] Target: maxWidth=${maxWidth}px, quality=${quality}`);
+    logger.debug(`[ImageConverter] Converting image to JPEG: ${imageUri}`);
+    logger.debug(`[ImageConverter] Target: maxWidth=${maxWidth}px, quality=${quality}`);
 
     // First, get the original image dimensions
     const originalImage = await ImageManipulator.manipulateAsync(
@@ -50,7 +51,7 @@ export const convertToJpeg = async (
 
     const originalWidth = originalImage.width;
     const originalHeight = originalImage.height;
-    console.log(`[ImageConverter] Original size: ${originalWidth}x${originalHeight}`);
+    logger.debug(`[ImageConverter] Original size: ${originalWidth}x${originalHeight}`);
 
     // Calculate resize dimensions maintaining aspect ratio
     let resizeWidth = originalWidth;
@@ -60,9 +61,9 @@ export const convertToJpeg = async (
       const ratio = maxWidth / originalWidth;
       resizeWidth = maxWidth;
       resizeHeight = Math.round(originalHeight * ratio);
-      console.log(`[ImageConverter] Resizing to: ${resizeWidth}x${resizeHeight} (maintaining aspect ratio)`);
+      logger.debug(`[ImageConverter] Resizing to: ${resizeWidth}x${resizeHeight} (maintaining aspect ratio)`);
     } else {
-      console.log(`[ImageConverter] Image width (${originalWidth}px) is within limit, keeping original size`);
+      logger.debug(`[ImageConverter] Image width (${originalWidth}px) is within limit, keeping original size`);
     }
 
     // Convert to JPEG, resize if needed, and compress
@@ -88,14 +89,14 @@ export const convertToJpeg = async (
       }
     );
 
-    console.log(`[ImageConverter] ✅ Converted to JPEG: ${convertedImage.width}x${convertedImage.height}`);
-    console.log(`[ImageConverter] ✅ JPEG URI: ${convertedImage.uri}`);
-    console.log(`[ImageConverter] ✅ Format: JPEG (HEIC/PNG converted)`);
-    console.log(`[ImageConverter] ✅ Orientation: Preserved (ImageManipulator handles EXIF)`);
+    logger.debug(`[ImageConverter] ✅ Converted to JPEG: ${convertedImage.width}x${convertedImage.height}`);
+    logger.debug(`[ImageConverter] ✅ JPEG URI: ${convertedImage.uri}`);
+    logger.debug(`[ImageConverter] ✅ Format: JPEG (HEIC/PNG converted)`);
+    logger.debug(`[ImageConverter] ✅ Orientation: Preserved (ImageManipulator handles EXIF)`);
 
     return convertedImage.uri;
   } catch (error) {
-    console.error('[ImageConverter] Error converting image to JPEG:', error);
+    logger.error('[ImageConverter] Error converting image to JPEG:', error);
     // If conversion fails, try to at least convert format without resize
     try {
       const fallback = await ImageManipulator.manipulateAsync(
@@ -106,12 +107,12 @@ export const convertToJpeg = async (
           format: ImageManipulator.SaveFormat.JPEG,
         }
       );
-      console.log('[ImageConverter] ✅ Fallback conversion successful');
+      logger.debug('[ImageConverter] ✅ Fallback conversion successful');
       return fallback.uri;
     } catch (fallbackError) {
-      console.error('[ImageConverter] ❌ Fallback conversion also failed:', fallbackError);
+      logger.error('[ImageConverter] ❌ Fallback conversion also failed:', fallbackError);
       // Last resort: return original (but warn user)
-      console.warn('[ImageConverter] ⚠️ Returning original URI - may be HEIC and fail on backend');
+      logger.warn('[ImageConverter] ⚠️ Returning original URI - may be HEIC and fail on backend');
       return imageUri;
     }
   }
@@ -125,21 +126,21 @@ export const convertMultipleToJpeg = async (
   imageUris: string[],
   options: ConvertToJpegOptions = {}
 ): Promise<string[]> => {
-  console.log(`[ImageConverter] Converting ${imageUris.length} images to JPEG...`);
+  logger.debug(`[ImageConverter] Converting ${imageUris.length} images to JPEG...`);
   const convertedUris: string[] = [];
   
   for (let i = 0; i < imageUris.length; i++) {
     try {
       const converted = await convertToJpeg(imageUris[i], options);
       convertedUris.push(converted);
-      console.log(`[ImageConverter] ✅ Converted ${i + 1}/${imageUris.length}`);
+      logger.debug(`[ImageConverter] ✅ Converted ${i + 1}/${imageUris.length}`);
     } catch (error) {
-      console.error(`[ImageConverter] ❌ Failed to convert image ${i + 1}:`, error);
+      logger.error(`[ImageConverter] ❌ Failed to convert image ${i + 1}:`, error);
       // Skip failed conversions
     }
   }
   
-  console.log(`[ImageConverter] ✅ Batch conversion complete: ${convertedUris.length}/${imageUris.length} successful`);
+  logger.debug(`[ImageConverter] ✅ Batch conversion complete: ${convertedUris.length}/${imageUris.length} successful`);
   return convertedUris;
 };
 

@@ -14,6 +14,7 @@ import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
 import { AppButton } from '../components/AppButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import { LibraryStackParamList } from '../navigation/types';
 import { useBatchScan } from '../contexts/BatchScanContext';
 import {
@@ -142,7 +143,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
               extractedText: parsed.extractedText,
             };
           } catch (error) {
-            console.error('Failed to parse result data:', error);
+            logger.error('Failed to parse result data:', error);
           }
         }
 
@@ -183,7 +184,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         setProcessing(false);
       }
     } catch (error) {
-      console.error('Failed to load job data:', error);
+      logger.error('Failed to load job data:', error);
     }
   };
 
@@ -203,7 +204,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
           : []);
 
     if (photosToProcess.length === 0) {
-      console.warn('[BatchReview] No photos to process');
+      logger.warn('[BatchReview] No photos to process');
       return;
     }
 
@@ -354,7 +355,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
               durationSeconds: track.durationSeconds,
             });
           } catch (error) {
-            console.error('Failed to save track', track.title, error);
+            logger.error('Failed to save track', track.title, error);
           }
         }
       }
@@ -371,7 +372,7 @@ export const BatchReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         navigation.navigate('LibraryHome');
       }
     } catch (error) {
-      console.error('Failed to save record', error);
+      logger.error('Failed to save record', error);
       Alert.alert('Error', 'Could not save record.');
       // CRITICAL: Don't remove from list if save failed
       // The card should remain visible so user can try again or edit manually

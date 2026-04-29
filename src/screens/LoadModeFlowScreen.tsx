@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -81,7 +82,7 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
 
         setMappings(newMappings);
       } catch (error) {
-        console.error('Failed to build load mappings', error);
+        logger.error('Failed to build load mappings', error);
         Alert.alert('Error', 'Could not prepare load mappings.');
         navigation.goBack();
       } finally {
@@ -151,7 +152,7 @@ export const LoadModeFlowScreen: React.FC<Props> = ({ route, navigation }) => {
         ]);
       }
     } catch (error) {
-      console.error('Failed to save location', error);
+      logger.error('Failed to save location', error);
       Alert.alert('Error', 'Could not save record location.');
     }
   };

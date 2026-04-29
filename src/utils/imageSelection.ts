@@ -7,6 +7,8 @@
  * 3. Use placeholder if neither exists
  */
 
+import { logger } from './logger';
+
 /**
  * Determines if we should use a remote cover image
  * Returns true if coverImageRemoteUrl exists and is valid
@@ -54,7 +56,7 @@ export function prepareImageFields(
   if (hasRemote) {
     // CRITICAL: If remote URL exists, DO NOT save local image
     // The HD image from API takes precedence
-    console.log('[ImageSelection] ✅ Using HD cover art from API, ignoring user photo');
+    logger.debug('[ImageSelection] ✅ Using HD cover art from API, ignoring user photo');
     return {
       coverImageRemoteUrl: coverImageRemoteUrl!,
       coverImageLocalUri: null, // Explicitly set to null - user photo is overridden
@@ -63,7 +65,7 @@ export function prepareImageFields(
   
   // No remote URL - use local image if available
   if (coverImageLocalUri && coverImageLocalUri.trim().length > 0) {
-    console.log('[ImageSelection] 📸 Using user photo (no metadata match found)');
+    logger.debug('[ImageSelection] 📸 Using user photo (no metadata match found)');
     return {
       coverImageRemoteUrl: null,
       coverImageLocalUri: coverImageLocalUri,
@@ -71,7 +73,7 @@ export function prepareImageFields(
   }
   
   // No image available
-  console.log('[ImageSelection] ⚠️  No cover image available');
+  logger.debug('[ImageSelection] ⚠️  No cover image available');
   return {
     coverImageRemoteUrl: null,
     coverImageLocalUri: null,

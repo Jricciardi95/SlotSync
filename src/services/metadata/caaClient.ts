@@ -8,6 +8,8 @@
  */
 
 import { getApiUrl } from '../../config/api';
+import { logger } from '../../utils/logger';
+import { apiFetch } from '../../config/apiFetch';
 import { CAAImage } from './types';
 
 /**
@@ -29,10 +31,10 @@ export async function getCoverArtFromCAA(
   }
 
   try {
-    console.log(`[CAAClient] Fetching cover art for MBID: ${mbid}`);
+    logger.debug(`[CAAClient] Fetching cover art for MBID: ${mbid}`);
     
     const apiUrl = getApiUrl(`/api/metadata/caa/release/${mbid}`);
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -41,9 +43,9 @@ export async function getCoverArtFromCAA(
 
     if (!response.ok) {
       if (response.status === 404) {
-        console.log(`[CAAClient] No cover art found for release ${mbid}`);
+        logger.debug(`[CAAClient] No cover art found for release ${mbid}`);
       } else {
-        console.warn(`[CAAClient] Failed to fetch cover art: ${response.status}`);
+        logger.warn(`[CAAClient] Failed to fetch cover art: ${response.status}`);
       }
       return null;
     }
@@ -51,7 +53,7 @@ export async function getCoverArtFromCAA(
     const data = await response.json();
     
     if (!data.images || data.images.length === 0) {
-      console.log(`[CAAClient] No images found`);
+      logger.debug(`[CAAClient] No images found`);
       return null;
     }
 
@@ -81,14 +83,14 @@ export async function getCoverArtFromCAA(
     }
 
     if (coverUrl) {
-      console.log(`[CAAClient] ✅ Found cover art: ${coverUrl.substring(0, 80)}...`);
+      logger.debug(`[CAAClient] ✅ Found cover art: ${coverUrl.substring(0, 80)}...`);
       return coverUrl;
     }
 
-    console.log(`[CAAClient] No valid image URL found`);
+    logger.debug(`[CAAClient] No valid image URL found`);
     return null;
   } catch (error) {
-    console.error(`[CAAClient] Error fetching cover art:`, error);
+    logger.error(`[CAAClient] Error fetching cover art:`, error);
     return null;
   }
 }
@@ -106,7 +108,7 @@ export async function getAllCoverArt(mbid: string): Promise<CAAImage[]> {
 
   try {
     const apiUrl = getApiUrl(`/api/metadata/caa/release/${mbid}`);
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -120,7 +122,7 @@ export async function getAllCoverArt(mbid: string): Promise<CAAImage[]> {
     const data = await response.json();
     return data.images || [];
   } catch (error) {
-    console.error(`[CAAClient] Error fetching all cover art:`, error);
+    logger.error(`[CAAClient] Error fetching all cover art:`, error);
     return [];
   }
 }

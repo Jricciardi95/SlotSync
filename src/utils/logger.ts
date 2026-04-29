@@ -1,51 +1,81 @@
 /**
- * Frontend Logger Utility
- * 
- * Provides a lightweight logging utility that respects production builds.
- * - debug/info: Only log in __DEV__ mode (development)
- * - warn/error: Always log (even in production)
- * 
- * Usage:
- *   import { logger } from '../utils/logger';
- *   logger.debug('Detailed debug info');
- *   logger.info('General information');
- *   logger.warn('Warning message');
- *   logger.error('Error message');
+ * Central logging for SlotSync.
+ *
+ * - debug / info / verbose: development only (__DEV__)
+ * - warn: development only (avoid noisy production consoles)
+ * - error: always emits a short line in production (no huge objects / URLs by default)
+ * - captureException: use for caught errors you might send to Sentry later
  */
+
+type LogContext = Record<string, unknown> | undefined;
 
 const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 
+function shortProdMessage(args: unknown[]): string {
+  const first = args[0];
+  if (typeof first === 'string') return first;
+  if (first instanceof Error) return first.message;
+  try {
+    return JSON.stringify(first).slice(0, 200);
+  } catch {
+    return '[unserializable]';
+  }
+}
+
 export const logger = {
-  /**
-   * Debug level logging - only shown in development
-   */
   debug(...args: unknown[]): void {
     if (isDev) {
       console.log(...args);
     }
   },
 
-  /**
-   * Info level logging - only shown in development
-   */
   info(...args: unknown[]): void {
     if (isDev) {
       console.info(...args);
     }
   },
 
-  /**
-   * Warn level logging - always shown (even in production)
-   */
+  /** Verbose traces (e.g. navigation). Dev-only. */
+  verbose(...args: unknown[]): void {
+    if (isDev) {
+      console.log(...args);
+    }
+  },
+
   warn(...args: unknown[]): void {
-    console.warn(...args);
+    if (isDev) {
+      console.warn(...args);
+    }
+  },
+
+  error(...args: unknown[]): void {
+    if (isDev) {
+      console.error(...args);
+      return;
+    }
+    console.error('[SlotSync]', shortProdMessage(args));
   },
 
   /**
-   * Error level logging - always shown (even in production)
+   * Use for non-fatal errors you may forward to crash reporting (Sentry, etc.).
+   * In production, logs a single sanitized line unless you wire `global.__SLOTSYNC_REPORT_ERROR__`.
    */
-  error(...args: unknown[]): void {
-    console.error(...args);
+  captureException(error: unknown, context?: LogContext): void {
+    if (isDev) {
+      console.error('[captureException]', context, error);
+      return;
+    }
+    const reporter = (globalThis as { __SLOTSYNC_REPORT_ERROR__?: (e: unknown, c?: LogContext) => void })
+      .__SLOTSYNC_REPORT_ERROR__;
+    if (typeof reporter === 'function') {
+      try {
+        reporter(error, context);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[SlotSync]', context?.screen ?? 'error', msg.slice(0, 300));
   },
 };
-

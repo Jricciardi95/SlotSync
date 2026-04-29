@@ -10,6 +10,7 @@ import { useTheme } from '../hooks/useTheme';
 import { ModesStackParamList } from '../navigation/types';
 import { getRows } from '../data/repository';
 import { Row } from '../data/types';
+import { logger } from '../utils/logger';
 
 type Props = NativeStackScreenProps<ModesStackParamList, 'LoadModeStart'>;
 
@@ -24,7 +25,7 @@ export const LoadModeStartScreen: React.FC<Props> = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       getRows().then(setRows).catch((err) => {
-        console.error('Failed to load rows', err);
+        logger.error('Failed to load rows', err);
         Alert.alert('Error', 'Could not load stands.');
       });
     }, [])

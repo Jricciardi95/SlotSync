@@ -8,6 +8,7 @@
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+import { logger } from './logger';
 
 /**
  * Generates a hash from an image file
@@ -26,7 +27,7 @@ export async function generateImageHash(imageUri: string): Promise<string | null
     });
 
     if (!base64 || base64.length === 0) {
-      console.warn('[ImageHash] Empty file, cannot generate hash');
+      logger.warn('[ImageHash] Empty file, cannot generate hash');
       return null;
     }
 
@@ -73,10 +74,10 @@ export async function generateImageHash(imageUri: string): Promise<string | null
     // Convert to positive hex string
     const hashString = Math.abs(hash).toString(16);
     
-    console.log(`[ImageHash] Generated hash: ${hashString} (from ${buffer.length} bytes)`);
+    logger.debug(`[ImageHash] Generated hash: ${hashString} (from ${buffer.length} bytes)`);
     return hashString;
   } catch (error) {
-    console.error('[ImageHash] Error generating hash:', error);
+    logger.error('[ImageHash] Error generating hash:', error);
     return null;
   }
 }

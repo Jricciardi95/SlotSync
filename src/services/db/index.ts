@@ -6,6 +6,8 @@
  * implementation details.
  */
 
+import { logger } from '../../utils/logger';
+
 // Re-export repository functions with service-level naming
 export {
   // Records
@@ -138,7 +140,7 @@ export async function saveResolvedAlbum(
         });
         savedTracks.push(savedTrack);
       } catch (error) {
-        console.warn('[DB Service] Failed to save track:', error);
+        logger.warn('[DB Service] Failed to save track:', error);
         // Continue saving other tracks
       }
     }
@@ -149,7 +151,7 @@ export async function saveResolvedAlbum(
     try {
       await saveImageHash(imageHash, record.id, imageUri);
     } catch (error) {
-      console.warn('[DB Service] Failed to save image hash:', error);
+      logger.warn('[DB Service] Failed to save image hash:', error);
       // Don't fail - caching is not critical
     }
   }

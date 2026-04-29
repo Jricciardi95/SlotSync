@@ -25,6 +25,7 @@ import {
   CandidateExtractionOptions,
 } from './types';
 import { normalizeOcrText, splitOcrIntoBlocks } from './visionService';
+import { logger } from '../../utils/logger';
 
 /**
  * Hostname patterns to block (non-album content)
@@ -475,8 +476,8 @@ export function extractCandidates(
   // Limit to maxCandidates
   const limited = filtered.slice(0, maxCandidates);
 
-  console.log(`[CandidateExtractor] Extracted ${limited.length} candidates from Vision results`);
-  console.log(`[CandidateExtractor] Sources: ${[...new Set(limited.map(c => c.source))].join(', ')}`);
+  logger.debug(`[CandidateExtractor] Extracted ${limited.length} candidates from Vision results`);
+  logger.debug(`[CandidateExtractor] Sources: ${[...new Set(limited.map(c => c.source))].join(', ')}`);
 
   return limited;
 }

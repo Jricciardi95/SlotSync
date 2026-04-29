@@ -13,6 +13,7 @@ import {
   normalizeScanResult,
   IdentificationResponse,
 } from './RecordIdentificationService';
+import { logger } from '../utils/logger';
 
 type BatchProcessingCallback = (progress: {
   jobId: string;
@@ -31,7 +32,7 @@ class BatchProcessingService {
    */
   async startProcessing(jobId: string, onProgress?: BatchProcessingCallback): Promise<void> {
     if (this.activeJobs.has(jobId)) {
-      console.log(`[BatchProcessing] Job ${jobId} already processing`);
+      logger.debug(`[BatchProcessing] Job ${jobId} already processing`);
       return;
     }
 
@@ -45,8 +46,8 @@ class BatchProcessingService {
 
     // Process in background (don't await - let it run)
     this.processJob(jobId).catch((error) => {
-      console.error(`[BatchProcessing] Error processing job ${jobId}:`, error);
-      updateBatchJobStatus(jobId, 'failed').catch(console.error);
+      logger.error(`[BatchProcessing] Error processing job ${jobId}:`, error);
+      updateBatchJobStatus(jobId, 'failed').catch((e) => logger.error('[BatchProcessing]', e));
       this.activeJobs.delete(jobId);
       this.callbacks.delete(jobId);
     });
@@ -58,7 +59,7 @@ class BatchProcessingService {
   private async processJob(jobId: string): Promise<void> {
     const job = await getBatchJob(jobId);
     if (!job) {
-      console.error(`[BatchProcessing] Job ${jobId} not found`);
+      logger.error(`[BatchProcessing] Job ${jobId} not found`);
       return;
     }
 
@@ -126,7 +127,7 @@ class BatchProcessingService {
           
           if (albumSuggestions.length > 0) {
             // Use canonical album suggestions from backend (already filtered by Discogs)
-            console.log(`[BatchProcessing] Low confidence for photo ${photo.id} with ${albumSuggestions.length} canonical album suggestions - treating as suggestion`);
+            logger.debug(`[BatchProcessing] Low confidence for photo ${photo.id} with ${albumSuggestions.length} canonical album suggestions - treating as suggestion`);
             validCandidates = albumSuggestions.map((suggestion: any) => ({
               artist: suggestion.artist,
               title: suggestion.albumTitle,
@@ -137,7 +138,7 @@ class BatchProcessingService {
             }));
           } else if (legacyCandidates.length > 0) {
             // Fallback to legacy candidates (for backward compatibility)
-            console.log(`[BatchProcessing] Low confidence for photo ${photo.id} with ${legacyCandidates.length} legacy candidates - treating as suggestion`);
+            logger.debug(`[BatchProcessing] Low confidence for photo ${photo.id} with ${legacyCandidates.length} legacy candidates - treating as suggestion`);
             
             // Backend should already filter candidates, but add extra safety filter here
             // Filter out obviously bad candidates (e.g., "Discogs", "| Releases", Reddit posts, etc.)
@@ -248,7 +249,7 @@ class BatchProcessingService {
             completed++;
           } else {
             // All candidates were filtered out - treat as failure
-            console.warn(`[BatchProcessing] All candidates filtered out for photo ${photo.id} - treating as failure`);
+            logger.warn(`[BatchProcessing] All candidates filtered out for photo ${photo.id} - treating as failure`);
             await updateBatchPhoto(
               photo.id,
               'error',
@@ -259,7 +260,7 @@ class BatchProcessingService {
           }
         } else {
           // Hard errors: log as error
-          console.error(`[BatchProcessing] Error identifying photo ${photo.id}:`, error);
+          logger.error(`[BatchProcessing] Error identifying photo ${photo.id}:`, error);
           
           if (error.code === 'TIMEOUT') {
             // Timeout - provide helpful error message
@@ -309,7 +310,7 @@ class BatchProcessingService {
         const callback = onProgress
           ? (progress: any) => onProgress(job.id, progress)
           : undefined;
-        this.startProcessing(job.id, callback).catch(console.error);
+        this.startProcessing(job.id, callback).catch((e) => logger.error('[BatchProcessing] resume', e));
       }
     }
   }
@@ -330,7 +331,7 @@ class BatchProcessingService {
           const result = JSON.parse(photo.resultData);
           results.set(photo.id, result);
         } catch (error) {
-          console.error(`[BatchProcessing] Failed to parse result for photo ${photo.id}:`, error);
+          logger.error(`[BatchProcessing] Failed to parse result for photo ${photo.id}:`, error);
         }
       }
     }

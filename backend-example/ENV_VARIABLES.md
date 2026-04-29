@@ -106,16 +106,6 @@ All environment variables are centralized in `backend-example/config/index.js`. 
 
 *Development defaults: `http://localhost:8081`, `http://localhost:19000`, `http://localhost:19006`, `http://127.0.0.1:8081`, `http://127.0.0.1:19000`, `http://127.0.0.1:19006`
 
-## OpenAI Configuration (Optional)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | `null` | OpenAI API key for GPT-based OCR parsing and Vinyl Vision |
-| `GPT_MODEL` | `gpt-4o` | GPT model to use |
-| `USE_GPT_OCR_PARSING` | `false` | Set to `true` to use GPT for OCR text parsing |
-| `ENABLE_VINYL_VISION` | `true` | Set to `false` to disable Vinyl Vision feature |
-| `ENABLE_GPT4_VISION` | `false` | Set to `true` to enable GPT-4 Vision API |
-
 ## Logging Configuration
 
 | Variable | Default | Description |
@@ -133,13 +123,14 @@ All environment variables are centralized in `backend-example/config/index.js`. 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ENABLE_DEV_TEST` | `false` | Set to `true` to enable dev test endpoint |
+| `ENABLE_IMAGE_EMBEDDINGS` | `true` | Set to `false` to skip CLIP-based image embedding in the identification pipeline |
 
 ## Production Requirements
 
 In production (`NODE_ENV=production`), the following are validated (warnings logged, but server still starts):
 
 1. **Discogs API**: Either `DISCOGS_PERSONAL_ACCESS_TOKEN` or `DISCOGS_API_KEY` must be set
-2. **Google Vision**: `GOOGLE_APPLICATION_CREDENTIALS` must be set and point to a valid file
+2. **Google Vision**: Optional; without credentials the server runs in Discogs-only / degraded vision mode
 
 ## Test Environment
 

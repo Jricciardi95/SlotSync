@@ -5,6 +5,8 @@
  */
 
 import { getApiUrl } from '../config/api';
+import { apiFetch } from '../config/apiFetch';
+import { logger } from './logger';
 import { createRecord, createTracksBatch, createRecordsBatch } from '../data/repository';
 
 export interface CsvRow {
@@ -79,7 +81,7 @@ async function fetchWithRetry<T>(
 
       // Exponential backoff: 1s, 2s
       const delay = Math.pow(2, attempt) * 1000;
-      console.log(`[CSV Import] Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      logger.debug(`[CSV Import] Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -115,7 +117,7 @@ async function fetchMetadataForRow(
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         try {
-          const response = await fetch(apiUrl, {
+          const response = await apiFetch(apiUrl, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
@@ -142,7 +144,7 @@ async function fetchMetadataForRow(
           }
         }
       } catch (error: any) {
-        console.warn(`[CSV Import] ⚠️  Release ID fetch failed: ${error.message}, falling back to text lookup`);
+        logger.warn(`[CSV Import] ⚠️  Release ID fetch failed: ${error.message}, falling back to text lookup`);
       }
     }
 
@@ -152,7 +154,7 @@ async function fetchMetadataForRow(
     const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
-      const response = await fetch(apiUrl, {
+      const response = await apiFetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artist, title }),
@@ -197,7 +199,7 @@ async function processRow(
   onProgress?: (current: number, total: number) => void
 ): Promise<ImportResult> {
   try {
-    console.log(`[CSV Import] Processing row ${rowIndex + 1}/${totalRows}: "${row.artist}" - "${row.title}"`);
+    logger.debug(`[CSV Import] Processing row ${rowIndex + 1}/${totalRows}: "${row.artist}" - "${row.title}"`);
 
     // Fetch metadata with retry
     const metadata = await fetchMetadataForRow(
@@ -259,7 +261,7 @@ async function processRow(
       recordId: record.id,
     };
   } catch (error: any) {
-    console.error(`[CSV Import] ❌ Row ${rowIndex + 1} failed:`, error.message);
+    logger.error(`[CSV Import] ❌ Row ${rowIndex + 1} failed:`, error.message);
     return {
       success: false,
       rowIndex,
@@ -337,7 +339,7 @@ async function processBatch(
     }
   } catch (error: any) {
     // If batch fails, mark all rows in batch as failed
-    console.error(`[CSV Import] ❌ Batch failed:`, error.message);
+    logger.error(`[CSV Import] ❌ Batch failed:`, error.message);
     for (const { row, index } of batch) {
       results.push({
         success: false,
@@ -377,7 +379,7 @@ export async function importCsvRowsWithEnrichment(
   const batchSize = 100; // PR5: Process 100 records per transaction
   const limit = createConcurrencyLimiter(concurrency);
 
-  console.log(`[CSV Import] 🚀 Starting import of ${rows.length} rows (concurrency: ${concurrency}, retries: ${maxRetries}, batch size: ${batchSize})`);
+  logger.debug(`[CSV Import] 🚀 Starting import of ${rows.length} rows (concurrency: ${concurrency}, retries: ${maxRetries}, batch size: ${batchSize})`);
 
   // PR5: Step 1: Fetch metadata for all rows (with concurrency limit)
   const metadataResults = await Promise.all(
@@ -386,7 +388,7 @@ export async function importCsvRowsWithEnrichment(
         fetchMetadataForRow(row.artist, row.title, row.releaseId, maxRetries)
           .then((metadata) => ({ row, index, metadata }))
           .catch((error) => {
-            console.error(`[CSV Import] ❌ Row ${index + 1} metadata fetch failed:`, error.message);
+            logger.error(`[CSV Import] ❌ Row ${index + 1} metadata fetch failed:`, error.message);
             return { row, index, metadata: null, error: error.message };
           })
       )
@@ -435,7 +437,7 @@ export async function importCsvRowsWithEnrichment(
   const successes = allResults.filter((r) => r.success);
   const failures = allResults.filter((r) => !r.success);
 
-  console.log(`[CSV Import] ✅ Import complete: ${successes.length} succeeded, ${failures.length} failed`);
+  logger.debug(`[CSV Import] ✅ Import complete: ${successes.length} succeeded, ${failures.length} failed`);
 
   return {
     successes,

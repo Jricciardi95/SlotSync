@@ -19,6 +19,7 @@ import { createRecord, createTrack } from '../data/repository';
 import { LibraryStackParamList } from '../navigation/types';
 import { convertToJpeg } from '../utils/imageConverter';
 import { getApiUrl } from '../config/api';
+import { logger } from '../utils/logger';
 import { ActivityIndicator } from 'react-native';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'AddRecord'>;
@@ -62,7 +63,7 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
       }).then((jpegUri) => {
         setCoverUri(jpegUri);
       }).catch((error) => {
-        console.error('[AddRecord] Failed to convert incoming image:', error);
+        logger.error('[AddRecord] Failed to convert incoming image:', error);
         // Fallback to original
         setCoverUri(imageUri);
       });
@@ -85,12 +86,12 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
     });
     if (!result.canceled && result.assets?.length) {
       // CRITICAL: Convert to JPEG (HEIC → JPEG)
-      console.log('[AddRecord] Converting selected image to JPEG...');
+      logger.debug('[AddRecord] Converting selected image to JPEG...');
       const jpegUri = await convertToJpeg(result.assets[0].uri, {
         maxWidth: 1200,
         quality: 0.8,
       });
-      console.log('[AddRecord] ✅ Image converted to JPEG');
+      logger.debug('[AddRecord] ✅ Image converted to JPEG');
       setCoverUri(jpegUri);
     }
   };
@@ -103,7 +104,7 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
 
     setLookingUp(true);
     try {
-      console.log(`[AddRecord] Looking up metadata for "${artist}" - "${title}"`);
+      logger.debug(`[AddRecord] Looking up metadata for "${artist}" - "${title}"`);
       const { identifyRecordByText } = await import('../services/RecordIdentificationService');
       const response = await identifyRecordByText(artist.trim(), title.trim());
       
@@ -134,7 +135,7 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
         Alert.alert('Not Found', `Could not find metadata for "${title}" by "${artist}". You can still save manually.`);
       }
     } catch (error) {
-      console.error('[AddRecord] Lookup error:', error);
+      logger.error('[AddRecord] Lookup error:', error);
       Alert.alert('Lookup Failed', 'Could not fetch metadata. Please try again or save manually.');
     } finally {
       setLookingUp(false);
@@ -202,12 +203,12 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
               trackNumber: track.trackNumber || null,
             });
           } catch (trackError) {
-            console.warn('[AddRecord] Failed to create track:', trackError);
+            logger.warn('[AddRecord] Failed to create track:', trackError);
           }
         }
       }
       
-      console.log('[AddRecord] Record saved successfully:', {
+      logger.debug('[AddRecord] Record saved successfully:', {
         id: newRecord.id,
         artist: newRecord.artist,
         title: newRecord.title,
@@ -218,7 +219,7 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
       navigation.goBack();
     } catch (error) {
       Alert.alert('Save failed', 'Please try again.');
-      console.log(error);
+      logger.debug(error);
     } finally {
       setSaving(false);
     }
@@ -249,12 +250,12 @@ export const AddRecordScreen: React.FC<Props> = ({ navigation, route }) => {
     
     if (!result.canceled && result.assets?.length) {
       // CRITICAL: Convert to JPEG (HEIC → JPEG)
-      console.log('[AddRecord] Converting edited image to JPEG...');
+      logger.debug('[AddRecord] Converting edited image to JPEG...');
       const jpegUri = await convertToJpeg(result.assets[0].uri, {
         maxWidth: 1200,
         quality: 0.8,
       });
-      console.log('[AddRecord] ✅ Image converted to JPEG');
+      logger.debug('[AddRecord] ✅ Image converted to JPEG');
       setCoverUri(jpegUri);
     }
   };

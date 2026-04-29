@@ -20,6 +20,8 @@ import {
   shelfSetBrightness,
 } from './shelfApi/shelfApi';
 import { ShelfApiError, ShelfNotConfiguredError } from './shelfApi/types';
+import { formatShelfFailureForUser } from './shelfApi/shelfUserMessages';
+import { getShelfAutoHighlightEnabled } from './shelfApi/storage';
 import { logger } from '../utils/logger';
 
 export type SlotEffect = 'steady' | 'slow_pulse' | 'color_wave';
@@ -62,7 +64,7 @@ const validateSlot = (slot: number, totalSlots?: number) => {
 };
 
 function alertLightingError(error: unknown, showAlert: boolean) {
-  const msg =
+  const raw =
     error instanceof ShelfNotConfiguredError
       ? error.message
       : error instanceof ShelfApiError
@@ -70,7 +72,9 @@ function alertLightingError(error: unknown, showAlert: boolean) {
         : error instanceof Error
           ? error.message
           : 'Unknown error';
-  logger.warn('[ShelfLighting]', msg);
+  const msg =
+    error instanceof ShelfNotConfiguredError ? raw : formatShelfFailureForUser(raw);
+  logger.debug('[ShelfLighting]', raw);
   if (showAlert) {
     Alert.alert('Shelf lighting', msg);
   }
@@ -150,6 +154,10 @@ export const highlightAlbumSlots = async (
   unitIpAddress?: string | null
 ): Promise<void> => {
   if (!slotNumbers.length) return;
+  if (!(await getShelfAutoHighlightEnabled())) {
+    logger.debug('[ShelfLighting] Auto highlight disabled in Settings');
+    return;
+  }
   const sorted = [...new Set(slotNumbers)].filter((n) => n >= 1).sort((a, b) => a - b);
   if (!sorted.length) return;
   try {

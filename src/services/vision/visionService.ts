@@ -16,6 +16,7 @@
 import { ImagePreprocessingOptions } from './types';
 import { resizeImageForVision } from '../../utils/imageResize';
 import { convertToJpeg } from '../../utils/imageConverter';
+import { logger } from '../../utils/logger';
 
 /**
  * Preprocesses an image for Google Vision API
@@ -41,9 +42,9 @@ export async function preprocessImageForVision(
     convertToGrayscale = false,
   } = options;
 
-  console.log('[VisionService] Preprocessing image for Vision API...');
-  console.log('[VisionService] Input URI:', imageUri);
-  console.log('[VisionService] Target size:', `${maxWidth}x${maxHeight}, quality: ${quality}`);
+  logger.debug('[VisionService] Preprocessing image for Vision API...');
+  logger.debug('[VisionService] Input URI:', imageUri);
+  logger.debug('[VisionService] Target size:', `${maxWidth}x${maxHeight}, quality: ${quality}`);
 
   // Step 1: Convert to JPEG (handles HEIC → JPEG conversion)
   // This also resizes to 1200px max, so we'll resize again for Vision API
@@ -51,7 +52,7 @@ export async function preprocessImageForVision(
     maxWidth: 1200, // Initial conversion size
     quality: 0.8,
   });
-  console.log('[VisionService] ✅ Converted to JPEG:', jpegUri);
+  logger.debug('[VisionService] ✅ Converted to JPEG:', jpegUri);
 
   // Step 2: Resize to optimal size for Vision API
   // Vision API works well with ~1024px on long side
@@ -63,7 +64,7 @@ export async function preprocessImageForVision(
     enhanceContrast,
     convertToGrayscale,
   });
-  console.log('[VisionService] ✅ Resized for Vision API:', resizedUri);
+  logger.debug('[VisionService] ✅ Resized for Vision API:', resizedUri);
 
   return resizedUri;
 }
@@ -85,7 +86,7 @@ export async function validateImageForVision(imageUri: string): Promise<boolean>
     const fileInfo = await getInfoAsync(imageUri);
     
     if (!fileInfo.exists) {
-      console.warn('[VisionService] Image file does not exist:', imageUri);
+      logger.warn('[VisionService] Image file does not exist:', imageUri);
       return false;
     }
 
@@ -93,14 +94,14 @@ export async function validateImageForVision(imageUri: string): Promise<boolean>
     if ('size' in fileInfo && fileInfo.size) {
       const sizeMB = fileInfo.size / (1024 * 1024);
       if (sizeMB > 10) {
-        console.warn(`[VisionService] Image too large: ${sizeMB.toFixed(2)}MB (max 10MB)`);
+        logger.warn(`[VisionService] Image too large: ${sizeMB.toFixed(2)}MB (max 10MB)`);
         return false;
       }
     }
 
     return true;
   } catch (error) {
-    console.error('[VisionService] Error validating image:', error);
+    logger.error('[VisionService] Error validating image:', error);
     return false;
   }
 }

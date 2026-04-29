@@ -78,7 +78,7 @@ export async function shelfGetJson<T extends object>(
       if (e?.name === 'AbortError') {
         lastErr = new ShelfApiError('Shelf request timed out');
       }
-      logger.warn(`[shelf] GET attempt ${attempt + 1}/${retries + 1} failed:`, msg);
+      logger.debug(`[shelf] GET attempt ${attempt + 1}/${retries + 1} failed:`, msg);
     }
   }
 

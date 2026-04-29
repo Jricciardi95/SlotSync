@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -125,7 +126,7 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
         const computedSwaps = computeSwaps(currentOrder, desiredOrder);
         setSwaps(computedSwaps);
       } catch (error) {
-        console.error('Failed to build swaps', error);
+        logger.error('Failed to build swaps', error);
         Alert.alert('Error', 'Could not prepare reorganization.');
         navigation.goBack();
       } finally {
@@ -209,7 +210,7 @@ export const ReorganizeModeFlowScreen: React.FC<Props> = ({ route, navigation })
         ]);
       }
     } catch (error) {
-      console.error('Failed to complete swap', error);
+      logger.error('Failed to complete swap', error);
       Alert.alert('Error', 'Could not complete swap.');
     }
   };

@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { RecordRow } from '../components/RecordRow';
 import { debounce } from '../utils/debounce';
+import { logger } from '../utils/logger';
 import { useFocusEffect } from '../navigation/useFocusEffect';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppScreen } from '../components/AppScreen';
@@ -366,7 +367,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
       songsListRef;
     
     if (!listRef.current || sections.length === 0) {
-      console.warn('[LibraryScreen] Cannot scroll - no ref or sections');
+      logger.warn('[LibraryScreen] Cannot scroll - no ref or sections');
       return;
     }
     
@@ -385,7 +386,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
           viewOffset: 0,
         });
       } catch (error) {
-        console.warn('[LibraryScreen] scrollToLocation failed:', error);
+        logger.warn('[LibraryScreen] scrollToLocation failed:', error);
       }
     }
   }, [searchMode, albumsSections, artistsSections, songsSections]);
@@ -410,7 +411,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
               // Refresh the list
               await refresh();
             } catch (error) {
-              console.error('Failed to delete record:', error);
+              logger.error('Failed to delete record:', error);
               Alert.alert('Error', 'Could not delete album. Please try again.');
             }
           },
@@ -438,7 +439,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
             viewOffset: 0,
           });
         } catch (error) {
-          console.warn('Fallback scroll also failed:', error);
+          logger.warn('Fallback scroll also failed:', error);
         }
       }, 100);
     }
@@ -616,7 +617,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
       } catch (error) {
-        console.error('Search failed', error);
+        logger.error('Search failed', error);
       } finally {
         setLoading(false);
       }
@@ -1255,7 +1256,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
                               }
                               await refresh();
                             } catch (error) {
-                              console.error('Failed to delete artist records:', error);
+                              logger.error('Failed to delete artist records:', error);
                               Alert.alert('Error', 'Could not delete albums. Please try again.');
                             }
                           },
@@ -1652,7 +1653,7 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
                     setPlaylistDescription('');
                     await refresh();
                   } catch (error) {
-                    console.error('Failed to save playlist:', error);
+                    logger.error('Failed to save playlist:', error);
                     Alert.alert('Error', 'Could not save playlist.');
                   }
                 }}
@@ -1712,7 +1713,7 @@ const PlaylistDetailContent: React.FC<{ playlistId: string | null }> = ({ playli
       const items = await getPlaylistItems(playlistId);
       setPlaylistItems(items);
     } catch (error) {
-      console.error('Failed to load playlist items:', error);
+      logger.error('Failed to load playlist items:', error);
     } finally {
       setLoading(false);
     }

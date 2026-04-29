@@ -11,6 +11,7 @@ import { ModesStackParamList } from '../navigation/types';
 import { getSessions, getSessionRecords } from '../data/repository';
 import { Session } from '../data/types';
 import { Ionicons } from '@expo/vector-icons';
+import { logger } from '../utils/logger';
 
 type Props = NativeStackScreenProps<ModesStackParamList, 'CleanupModeHome'>;
 
@@ -39,7 +40,7 @@ export const CleanupModeHomeScreen: React.FC<Props> = ({ navigation }) => {
       );
       setSessions(sessionsWithCounts);
     } catch (error) {
-      console.error('Failed to load sessions', error);
+      logger.error('Failed to load sessions', error);
       Alert.alert('Error', 'Could not load sessions.');
     } finally {
       setLoading(false);

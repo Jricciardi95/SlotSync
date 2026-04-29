@@ -54,6 +54,22 @@ interface IdentificationResultProps {
   navigation: NavigationProp<LibraryStackParamList>;
 }
 
+function getConfidenceLabel(confidence?: number): string {
+  if (confidence === undefined) return 'Confidence unavailable';
+  if (confidence >= 0.85) return 'High confidence match';
+  if (confidence >= 0.65) return 'Possible match - review before saving';
+  return 'Low confidence - please confirm or choose another';
+}
+
+function getSourceExplanation(source?: string): string {
+  const s = (source || '').toLowerCase();
+  if (s.includes('barcode')) return 'Matched using barcode data.';
+  if (s.includes('cache')) return 'Matched instantly from previous scan cache.';
+  if (s.includes('vision')) return 'Matched using cover text/vision signals.';
+  if (s.includes('discogs')) return 'Matched by Discogs catalog lookup.';
+  return 'Matched using backend identification pipeline.';
+}
+
 const ErrorRetryScreen: React.FC<{
   error: { code: string; message: string; retryable: boolean };
   capturedUri: string | null;
@@ -131,6 +147,8 @@ export const ResultConfirmation: React.FC<{
   const hasAlternates = Array.isArray(result.alternates) && result.alternates.length > 0;
   const sortedTracks = sortTracksByPosition(currentMatch.tracks);
   const hasTracks = currentMatch.tracks && currentMatch.tracks.length > 0;
+  const confidenceLabel = getConfidenceLabel(currentMatch.confidence);
+  const sourceExplanation = getSourceExplanation(currentMatch.source);
 
   return (
     <AppScreen title="Confirm Match">
@@ -181,6 +199,12 @@ export const ResultConfirmation: React.FC<{
                 </AppText>
               )}
             </View>
+            <AppText variant="caption" style={{ color: colors.textSecondary, marginBottom: spacing.xs }}>
+              {confidenceLabel}
+            </AppText>
+            <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: spacing.md }}>
+              {sourceExplanation}
+            </AppText>
             
             {/* Tracklist */}
             {hasTracks && sortedTracks && sortedTracks.length > 0 && (
@@ -277,8 +301,11 @@ export const SuggestionsReview: React.FC<{
           />
         </View>
         <AppCard>
-          <AppText variant="subtitle" style={{ marginBottom: spacing.sm }}>
-            We found some possible matches:
+          <AppText variant="subtitle" style={{ marginBottom: spacing.xs }}>
+            Possible matches
+          </AppText>
+          <AppText variant="caption" style={{ marginBottom: spacing.sm, color: colors.textSecondary }}>
+            Choose the best one below, or continue manually.
           </AppText>
           <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
             {albumSuggestions
@@ -292,7 +319,8 @@ export const SuggestionsReview: React.FC<{
                        suggestion.artist.trim().length > 0 &&
                        suggestion.discogsId;
               })
-              .slice(0, 8)
+              .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+              .slice(0, 3)
               .map((suggestion: AlbumSuggestion, idx: number) => {
                 const label = `${suggestion.artist.trim()} – ${suggestion.albumTitle.trim()}`;
                 
@@ -309,6 +337,9 @@ export const SuggestionsReview: React.FC<{
                     onPress={() => onSelectSuggestion(suggestion)}
                   >
                     <AppText variant="body" style={{ fontWeight: '600' }}>{label}</AppText>
+                    <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: spacing.xs }}>
+                      {getConfidenceLabel(suggestion.confidence)}
+                    </AppText>
                     <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
                       {suggestion.releaseYear && (
                         <AppText variant="caption" style={{ color: colors.textMuted }}>

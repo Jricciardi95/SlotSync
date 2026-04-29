@@ -22,6 +22,7 @@ import { useTheme } from '../hooks/useTheme';
 import { createRow, getRowUnitCounts, getRows, updateRow, deleteRow } from '../data/repository';
 import { Row } from '../data/types';
 import { StandsStackParamList } from '../navigation/types';
+import { logger } from '../utils/logger';
 
 type Props = NativeStackScreenProps<StandsStackParamList, 'RowsHome'>;
 
@@ -67,7 +68,7 @@ export const StandsScreen: React.FC<Props> = ({ navigation }) => {
       setUnitCounts((prev) => ({ ...prev, [newRow.id]: 0 }));
     } catch (error) {
       Alert.alert('Error creating stand', 'Please try again.');
-      console.log(error);
+      logger.debug(error);
     }
   };
 
@@ -95,7 +96,7 @@ export const StandsScreen: React.FC<Props> = ({ navigation }) => {
       setEditRowName('');
     } catch (error) {
       Alert.alert('Error updating stand', 'Please try again.');
-      console.log(error);
+      logger.debug(error);
     }
   };
 
@@ -119,7 +120,7 @@ export const StandsScreen: React.FC<Props> = ({ navigation }) => {
               });
             } catch (error) {
               Alert.alert('Error deleting stand', 'Please try again.');
-              console.log(error);
+              logger.debug(error);
             }
           },
         },

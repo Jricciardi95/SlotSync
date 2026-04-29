@@ -18,6 +18,7 @@ import { AppCard } from '../components/AppCard';
 import { AppText } from '../components/AppText';
 import { AppButton } from '../components/AppButton';
 import { useTheme } from '../hooks/useTheme';
+import { logger } from '../utils/logger';
 import {
   getRecordById,
   getRecordLocationDetails,
@@ -47,7 +48,7 @@ import {
   Track,
 } from '../data/types';
 import { LibraryStackParamList } from '../navigation/types';
-import { highlightAlbumSlots, setSlotLight } from '../services/ShelfLightingClient';
+import { highlightAlbumSlots, setSlotLight, shelfBlinkSlot } from '../services/ShelfLightingClient';
 import { AppIconButton } from '../components/AppIconButton';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'RecordDetail'>;
@@ -61,7 +62,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Debug logging
   useEffect(() => {
-    console.log('[RecordDetail] Mounted with params:', {
+    logger.debug('[RecordDetail] Mounted with params:', {
       routeParams: route.params,
       navParams: (navigation as any).params,
       recordId,
@@ -74,7 +75,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Use useEffect to navigate (can't call navigation during render)
   useEffect(() => {
     if (!recordId) {
-      console.error('[RecordDetail] Missing recordId in route params, navigating back', {
+      logger.error('[RecordDetail] Missing recordId in route params, navigating back', {
         routeParams: route.params,
         navParams: (navigation as any).params,
       });
@@ -121,7 +122,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
 
   const load = useCallback(async (showSpinner = true) => {
-    console.log('[RecordDetail] load() called', {
+    logger.debug('[RecordDetail] load() called', {
       showSpinner,
       hasRecord: !!record,
       recordId: record?.id,
@@ -131,11 +132,11 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     // Only set loading if we don't have record data yet, or if explicitly requested
     // CRITICAL: Never show spinner if we already have record data (prevents spinner on navigation back)
     if (showSpinner && (!record || record.id !== recordId)) {
-      console.log('[RecordDetail] Setting loading=true (showSpinner=true, no record data)');
+      logger.debug('[RecordDetail] Setting loading=true (showSpinner=true, no record data)');
       setLoading(true);
     } else {
       // If we have record data, ensure loading is false to prevent any spinner flash
-      console.log('[RecordDetail] Setting loading=false (have record data or showSpinner=false)');
+      logger.debug('[RecordDetail] Setting loading=false (have record data or showSpinner=false)');
       setLoading(false);
     }
     try {
@@ -145,7 +146,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         getTracksByRecord(recordId),
         getSlotAssignmentDetails(recordId), // PR7: Load slot assignment
       ]);
-      console.log('[RecordDetail] Loaded record:', {
+      logger.debug('[RecordDetail] Loaded record:', {
         id: recordData?.id,
         artist: recordData?.artist,
         title: recordData?.title,
@@ -161,20 +162,20 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         // ✅ Mark that we've loaded this record at least once
         // This ensures we never show the full-screen spinner after the first successful load
         setHasLoadedOnce(true);
-        console.log('[RecordDetail] ✅ Record loaded successfully, hasLoadedOnce=true');
+        logger.debug('[RecordDetail] ✅ Record loaded successfully, hasLoadedOnce=true');
       } else if (!recordData && record) {
         // If API returns null but we have existing record, keep the existing record
         // This prevents clearing record state on failed API calls
-        console.warn('[RecordDetail] API returned null record, preserving existing record data');
+        logger.warn('[RecordDetail] API returned null record, preserving existing record data');
       }
       setLocation(locationData);
       setSlotAssignment(slotAssignmentData); // PR7: Set slot assignment
       setTracks(tracksData);
     } catch (error) {
-      console.error('[RecordDetail] Error loading record:', error);
+      logger.error('[RecordDetail] Error loading record:', error);
       // Don't clear record state on error - keep existing data
     } finally {
-      console.log('[RecordDetail] load() completed, setting loading=false');
+      logger.debug('[RecordDetail] load() completed, setting loading=false');
       setLoading(false);
     }
   }, [recordId, record]);
@@ -191,7 +192,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[RecordDetail] useFocusEffect triggered', {
+      logger.debug('[RecordDetail] useFocusEffect triggered', {
         hasLoadedOnce,
         hasRecord: !!record,
         recordId: record?.id,
@@ -201,15 +202,15 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       
       if (!hasLoadedOnce) {
         // First time we ever open this record → allow full-screen spinner
-        console.log('[RecordDetail] First load - allowing full-screen spinner');
+        logger.debug('[RecordDetail] First load - allowing full-screen spinner');
         load(true);
       } else {
         // Coming back from edit or navigating again to the same record:
         // show existing UI immediately and just refresh in the background
-        console.log('[RecordDetail] Returning to already-loaded record - refreshing in background (no spinner)');
+        logger.debug('[RecordDetail] Returning to already-loaded record - refreshing in background (no spinner)');
         setLoading(false);
         load(false).catch(err => {
-          console.error('[RecordDetail] Background refresh failed:', err);
+          logger.error('[RecordDetail] Background refresh failed:', err);
           // Don't show error to user - just log it
         });
       }
@@ -246,7 +247,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     setFetchingTracks(true);
     try {
-      console.log(`[RecordDetail] Looking up metadata for "${record.artist}" - "${record.title}"`);
+      logger.debug(`[RecordDetail] Looking up metadata for "${record.artist}" - "${record.title}"`);
       
       // Use text-based lookup (works without cover image)
       const { identifyRecordByText } = await import('../services/RecordIdentificationService');
@@ -275,7 +276,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         if (Object.keys(updates).length > 0) {
           const { updateRecord } = await import('../data/repository');
           await updateRecord(recordId, updates);
-          console.log(`[RecordDetail] ✅ Updated record metadata:`, updates);
+          logger.debug(`[RecordDetail] ✅ Updated record metadata:`, updates);
         }
         
         // Add tracks if we have them and don't already have tracks
@@ -296,7 +297,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 savedCount++;
               }
             } catch (error) {
-              console.warn(`[RecordDetail] Failed to save track:`, error);
+              logger.warn(`[RecordDetail] Failed to save track:`, error);
             }
           }
           
@@ -320,7 +321,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         Alert.alert('Not Found', `Could not find metadata for "${record.title}" by "${record.artist}".`);
       }
     } catch (error: any) {
-      console.error('[RecordDetail] Failed to lookup metadata:', error);
+      logger.error('[RecordDetail] Failed to lookup metadata:', error);
       Alert.alert('Error', 'Failed to lookup metadata. Please try again.');
     } finally {
       setFetchingTracks(false);
@@ -335,12 +336,12 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     setFetchingTracks(true);
     try {
-      console.log(`[RecordDetail] Fetching tracks for ${record.artist} - ${record.title}`);
-      console.log(`[RecordDetail] Image URI: ${record.coverImageLocalUri}`);
+      logger.debug(`[RecordDetail] Fetching tracks for ${record.artist} - ${record.title}`);
+      logger.debug(`[RecordDetail] Image URI: ${record.coverImageLocalUri}`);
       // Don't pass abort signal - let it complete fully
       const response = await identifyRecord(record.coverImageLocalUri);
       
-      console.log(`[RecordDetail] Response received:`, {
+      logger.debug(`[RecordDetail] Response received:`, {
         hasBestMatch: !!response.bestMatch,
         artist: response.bestMatch?.artist,
         title: response.bestMatch?.title,
@@ -350,8 +351,8 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       });
       
       if (response.bestMatch.tracks && response.bestMatch.tracks.length > 0) {
-        console.log(`[RecordDetail] ✅ Received ${response.bestMatch.tracks.length} tracks from API`);
-        console.log(`[RecordDetail] Track list:`, response.bestMatch.tracks.map((t, i) => `${i + 1}. ${t.title}`).join(', '));
+        logger.debug(`[RecordDetail] ✅ Received ${response.bestMatch.tracks.length} tracks from API`);
+        logger.debug(`[RecordDetail] Track list:`, response.bestMatch.tracks.map((t, i) => `${i + 1}. ${t.title}`).join(', '));
         
         // Save tracks to database
         let savedCount = 0;
@@ -359,7 +360,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         for (const track of response.bestMatch.tracks) {
           try {
             if (!track.title || !track.title.trim()) {
-              console.warn(`[RecordDetail] ⚠️ Skipping track with empty title`);
+              logger.warn(`[RecordDetail] ⚠️ Skipping track with empty title`);
               continue;
             }
             await createTrack({
@@ -371,22 +372,22 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               durationSeconds: track.durationSeconds ?? undefined,
             });
             savedCount++;
-            console.log(`[RecordDetail] ✅ Saved track ${savedCount}: "${track.title}"`);
+            logger.debug(`[RecordDetail] ✅ Saved track ${savedCount}: "${track.title}"`);
           } catch (error) {
             failedCount++;
-            console.error(`[RecordDetail] ❌ Failed to save track "${track.title}":`, error);
+            logger.error(`[RecordDetail] ❌ Failed to save track "${track.title}":`, error);
           }
         }
         
-        console.log(`[RecordDetail] Successfully saved ${savedCount}/${response.bestMatch.tracks.length} tracks`);
+        logger.debug(`[RecordDetail] Successfully saved ${savedCount}/${response.bestMatch.tracks.length} tracks`);
         if (failedCount > 0) {
-          console.warn(`[RecordDetail] ⚠️ Failed to save ${failedCount} tracks`);
+          logger.warn(`[RecordDetail] ⚠️ Failed to save ${failedCount} tracks`);
         }
         
         // Reload tracks from database
         const updatedTracks = await getTracksByRecord(recordId);
         setTracks(updatedTracks);
-        console.log(`[RecordDetail] ✅ Reloaded ${updatedTracks.length} tracks from database`);
+        logger.debug(`[RecordDetail] ✅ Reloaded ${updatedTracks.length} tracks from database`);
         
         if (savedCount > 0) {
           Alert.alert('Success', `Added ${savedCount} track${savedCount > 1 ? 's' : ''} to this album.`);
@@ -396,8 +397,8 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           Alert.alert('Info', 'Tracks were found but could not be saved.');
         }
       } else {
-        console.warn(`[RecordDetail] ⚠️  No tracks in response!`);
-        console.warn(`[RecordDetail] Response structure:`, {
+        logger.warn(`[RecordDetail] ⚠️  No tracks in response!`);
+        logger.warn(`[RecordDetail] Response structure:`, {
           hasBestMatch: !!response.bestMatch,
           bestMatchKeys: response.bestMatch ? Object.keys(response.bestMatch) : [],
           tracksValue: response.bestMatch?.tracks,
@@ -411,7 +412,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         );
       }
     } catch (error: any) {
-      console.error('[RecordDetail] Failed to fetch tracks:', error);
+      logger.error('[RecordDetail] Failed to fetch tracks:', error);
       Alert.alert(
         'Error',
         error.code === 'LOW_CONFIDENCE' && error.candidates
@@ -459,7 +460,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       closeAssign();
     } catch (error) {
       Alert.alert('Assignment failed', 'Please try again.');
-      console.log(error);
+      logger.debug(error);
     } finally {
       setPickerLoading(false);
     }
@@ -484,7 +485,25 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         effect: 'steady',
       });
     } catch (error) {
-      console.log(error);
+      logger.debug(error);
+    } finally {
+      setLighting(false);
+    }
+  };
+
+  const handleFindMode = async () => {
+    if (!location) return;
+    const unitRecord = await getUnitById(location.unitId);
+    if (!unitRecord) {
+      Alert.alert('Unit not found', 'This unit no longer exists.');
+      return;
+    }
+    try {
+      setLighting(true);
+      await shelfBlinkSlot(location.slotNumbers[0], unitRecord.ipAddress);
+      Alert.alert('Find mode', `Blinking slot ${location.slotNumbers[0]} on shelf.`);
+    } catch (error) {
+      logger.debug(error);
     } finally {
       setLighting(false);
     }
@@ -506,7 +525,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
       Alert.alert('Added to session', 'Record added to current listening session.');
     } catch (error) {
-      console.error('Failed to add to session', error);
+      logger.error('Failed to add to session', error);
       Alert.alert('Error', 'Could not add record to session.');
     }
   };
@@ -528,7 +547,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               // Navigate back to library
               navigation.navigate('LibraryHome');
             } catch (error) {
-              console.error('Failed to delete record', error);
+              logger.error('Failed to delete record', error);
               Alert.alert('Error', 'Could not delete record.');
             }
           },
@@ -614,7 +633,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Once we've loaded the record at least once, we never show the spinner again
   // (even when navigating back from edit screen)
   if (loading && !hasLoadedOnce) {
-    console.log('[RecordDetail] Showing full-screen spinner (first load)', {
+    logger.debug('[RecordDetail] Showing full-screen spinner (first load)', {
       loading,
       hasLoadedOnce,
       hasRecord: !!record,
@@ -633,7 +652,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // BUT: Only show this if we've never successfully loaded this record before
   // This prevents "not found" when returning from edit screen
   if (!record && !loading && !hasLoadedOnce) {
-    console.log('[RecordDetail] Record not found after load completed (never loaded before)');
+    logger.debug('[RecordDetail] Record not found after load completed (never loaded before)');
     return (
       <AppScreen title="Album Details">
         <View style={styles.loadingState}>
@@ -647,7 +666,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // This ensures we never show a spinner when navigating back from edit
   // If record is null but we've loaded once, it means we're refreshing - show existing data or wait
   if (!record && hasLoadedOnce) {
-    console.log('[RecordDetail] Record temporarily null but hasLoadedOnce=true - showing loading state');
+    logger.debug('[RecordDetail] Record temporarily null but hasLoadedOnce=true - showing loading state');
     // Show a minimal loading state while refreshing, but don't show "not found"
     return (
       <AppScreen title="Album Details">
@@ -677,13 +696,13 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             onPress={() => {
               // Always use goBack() - LibraryScreen will restore tab from lastTabBeforeNavigationRef
               // The ref is set before navigation, so it will be available when LibraryScreen comes into focus
-              console.log('[RecordDetail] Back button pressed, returnToTab:', returnToTab);
+              logger.debug('[RecordDetail] Back button pressed, returnToTab:', returnToTab);
               
               if (navigation.canGoBack()) {
-                console.log('[RecordDetail] Using goBack() - LibraryScreen will restore tab from ref');
+                logger.debug('[RecordDetail] Using goBack() - LibraryScreen will restore tab from ref');
                 navigation.goBack();
               } else {
-                console.warn('[RecordDetail] Cannot go back, navigating to LibraryHome');
+                logger.warn('[RecordDetail] Cannot go back, navigating to LibraryHome');
                 // If we can't go back, navigate with returnToTab as fallback
                 if (returnToTab) {
                   navigation.navigate('LibraryHome', { returnToTab } as any);
@@ -853,6 +872,12 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               variant="secondary"
               disabled={!location || lighting}
               onPress={handleLight}
+            />
+            <AppButton
+              title="Find on Shelf (Blink)"
+              variant="secondary"
+              disabled={!location || lighting}
+              onPress={handleFindMode}
             />
           </AppCard>
 

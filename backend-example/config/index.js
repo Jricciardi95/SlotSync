@@ -121,16 +121,6 @@ const embedding = {
 };
 
 // ============================================================================
-// OpenAI Configuration (optional)
-// ============================================================================
-const openai = {
-  apiKey: process.env.OPENAI_API_KEY || null,
-  model: process.env.GPT_MODEL || 'gpt-4o',
-  useGptOcrParsing: process.env.USE_GPT_OCR_PARSING === 'true',
-  enableVinylVision: process.env.ENABLE_VINYL_VISION !== 'false',
-};
-
-// ============================================================================
 // Scoring & Thresholds Configuration
 // ============================================================================
 const scoring = {
@@ -186,7 +176,6 @@ const logging = {
 // ============================================================================
 const features = {
   enableDevTest: process.env.ENABLE_DEV_TEST === 'true',
-  enableGpt4Vision: process.env.ENABLE_GPT4_VISION === 'true',
 };
 
 // ============================================================================
@@ -250,7 +239,6 @@ module.exports = {
   discogs,
   database,
   embedding,
-  openai,
   scoring,
   phase2,
   request,

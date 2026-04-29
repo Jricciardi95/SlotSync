@@ -11,7 +11,6 @@ const visionExtractor = require('./visionExtractor');
 const imageEmbedding = require('./imageEmbedding');
 const imagePreprocessing = require('./imagePreprocessing');
 const embeddingDatabase = require('./embeddingDatabase');
-const gpt4Vision = require('./gpt4Vision');
 const { searchReleaseByArtistAndTitle } = require('./musicbrainzService');
 const { searchDiscogsByBarcode } = require('../server-hybrid');
 const { processImageWithGoogleVision, extractCandidates, key } = require('../server-hybrid');
@@ -117,32 +116,6 @@ async function generateCandidatesFromInput(req, imageBuffer, debugInfo) {
 
         debugInfo.candidatesExtracted = candidates.length;
         console.log(`[Pipeline] Total ${candidates.length} candidates from Vision`);
-
-        // GPT-4 Vision fallback if candidates insufficient
-        if (candidates.length === 0 || (candidates.length > 0 && candidates[0].confidence < 0.5)) {
-          if (gpt4Vision.isEnabled()) {
-            console.log(`[Pipeline] 🧠 Vision candidates insufficient, trying GPT-4 Vision fallback...`);
-            try {
-              const gpt4Result = await gpt4Vision.identifyWithGPT4Vision(imageBuffer, null, candidates);
-              if (gpt4Result && gpt4Result.confidence >= 0.5) {
-                console.log(`[Pipeline] ✅ GPT-4 Vision identified: "${gpt4Result.artist}" - "${gpt4Result.title}"`);
-                candidates.unshift({
-                  artist: gpt4Result.artist,
-                  title: gpt4Result.title,
-                  confidence: gpt4Result.confidence,
-                  source: 'gpt4_vision',
-                  year: gpt4Result.year,
-                  tracks: gpt4Result.tracks
-                });
-                debugInfo.gpt4VisionUsed = true;
-                debugInfo.sourcesUsed.push('gpt4_vision');
-              }
-            } catch (gpt4Error) {
-              console.error('[Pipeline] GPT-4 Vision error:', gpt4Error.message);
-              debugInfo.errors.push(`GPT-4 Vision: ${gpt4Error.message}`);
-            }
-          }
-        }
 
       } catch (error) {
         const errorMsg = error.message || 'Unknown Vision API error';

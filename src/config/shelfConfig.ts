@@ -6,6 +6,9 @@
 /** AsyncStorage key for normalized shelf base URL (e.g. http://192.168.1.50) */
 export const SHELF_BASE_URL_STORAGE_KEY = '@slotsync/shelf_base_url_v1';
 
+/** When true (default), opening a record with shelf location triggers highlight on the ESP32 */
+export const SHELF_AUTO_HIGHLIGHT_STORAGE_KEY = '@slotsync/shelf_auto_highlight_v1';
+
 /** Optional default from env (Expo: EXPO_PUBLIC_SHELF_BASE_URL) when storage is empty */
 export const SHELF_ENV_BASE_URL = process.env.EXPO_PUBLIC_SHELF_BASE_URL?.trim() ?? '';
 

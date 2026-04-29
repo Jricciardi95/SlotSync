@@ -32,9 +32,9 @@ function getDatabase() {
  * 
  * @param {Object} album - Album info {artist, title, year, discogsId, coverImageUrl}
  * @param {Array<number>} embedding - Embedding vector
- * @param {string} model - Model used to generate embedding (e.g., 'gpt-4o+text-embedding-3-large')
+ * @param {string} model - Model used to generate embedding (CLIP)
  */
-async function storeEmbedding(album, embedding, model = 'gpt-4o+text-embedding-3-large') {
+async function storeEmbedding(album, embedding, model = 'Xenova/clip-vit-base-patch32') {
   return new Promise((resolve, reject) => {
     getDatabase().then(db => {
       // Serialize embedding array to JSON string for storage

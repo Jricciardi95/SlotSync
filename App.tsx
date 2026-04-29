@@ -2,11 +2,17 @@
 import React, { useEffect, useState, ErrorInfo } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Sentry from '@sentry/react-native';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { initializeDatabase } from './src/data/database';
 import { BatchScanProvider } from './src/contexts/BatchScanContext';
 import { batchProcessingService } from './src/services/BatchProcessingService';
 import { initializeApiBaseUrl } from './src/config/api';
+import { logger } from './src/utils/logger';
+import { initMonitoring } from './src/monitoring/initMonitoring';
+
+/** Run before first render so preview/production builds capture early crashes. */
+initMonitoring();
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -23,7 +29,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('[App] ❌ Error Boundary caught error:', error, errorInfo);
+    logger.captureException(error, { screen: 'ErrorBoundary', componentStack: errorInfo.componentStack });
     this.setState({ error, errorInfo });
   }
 
@@ -51,34 +57,28 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export default function App() {
+function App() {
   const [isReady, setIsReady] = useState(false);
   const [initError, setInitError] = useState<Error | null>(null);
 
   useEffect(() => {
     const init = async () => {
       try {
-        console.log('[App] 🚀 Starting initialization...');
-        
-        // Initialize API base URL first (with health checks)
-        // Add timeout to prevent hanging forever
-        console.log('[App] 📡 Initializing API base URL...');
+        logger.debug('[App] Starting initialization');
+
         const apiInitPromise = initializeApiBaseUrl();
-        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 10000)); // 10s timeout
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 10000));
         await Promise.race([apiInitPromise, timeoutPromise]);
-        console.log('[App] ✅ API base URL initialized');
-        
-        console.log('[App] 💾 Initializing database...');
+        logger.debug('[App] API base URL step finished');
+
         await initializeDatabase();
-        console.log('[App] ✅ Database initialized');
-        
-        // Resume any background batch processing jobs
-        batchProcessingService.resumeAllJobs().catch(console.error);
-        
-        console.log('[App] ✅ Initialization complete');
+        logger.debug('[App] Database initialized');
+
+        batchProcessingService.resumeAllJobs().catch((e) => logger.error('[App] Batch resume', e));
+
         setIsReady(true);
       } catch (error) {
-        console.error('[App] ❌ Failed to initialize app', error);
+        logger.captureException(error, { screen: 'App', phase: 'init' });
         setInitError(error as Error);
         // Still set ready to allow app to continue even if API init fails
         setIsReady(true);
@@ -115,6 +115,8 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(App);
 
 const styles = StyleSheet.create({
   loadingContainer: {

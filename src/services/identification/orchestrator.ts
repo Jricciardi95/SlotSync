@@ -23,9 +23,11 @@ import { preprocessImageForVision, validateImageForVision } from '../vision/visi
 import { findRecordByImageHash } from '../db';
 import { saveResolvedAlbum } from '../db';
 import { getApiUrl, API_CONFIG } from '../../config/api';
+import { apiFetch } from '../../config/apiFetch';
 import { IdentificationResult, IdentificationError, IdentificationOptions } from './types';
 import { ResolvedAlbum } from '../metadata/types';
 import { debug } from '../../utils/debug';
+import { logger } from '../../utils/logger';
 
 /**
  * Converts a cached database record to ResolvedAlbum format
@@ -76,17 +78,17 @@ async function callBackendIdentification(
 
   const apiUrl = getApiUrl(API_CONFIG.ENDPOINTS.IDENTIFY_RECORD);
   
-  // CRITICAL: Log the exact URL being called for debugging
-  console.log('[IDENTIFICATION] ========================================');
-  console.log('[IDENTIFICATION] 🚀 Calling backend identification API');
-  console.log('[IDENTIFICATION] 📍 Full URL:', apiUrl);
-  console.log('[IDENTIFICATION] 📍 Base URL:', API_CONFIG.BASE_URL);
-  console.log('[IDENTIFICATION] ⏱️  Timeout:', API_CONFIG.TIMEOUT, 'ms (90 seconds)');
-  
+  logger.debug('[IDENTIFICATION] Calling API', {
+    url: apiUrl,
+    base: API_CONFIG.BASE_URL,
+    timeoutMs: API_CONFIG.TIMEOUT,
+  });
+
   // Validate URL doesn't contain localhost (won't work on physical devices)
   if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-    const errorMsg = 'API URL contains localhost. Physical devices cannot reach localhost. Set EXPO_PUBLIC_API_BASE_URL to your computer\'s LAN IP address (e.g., http://192.168.1.215:3000)';
-    console.error('[IDENTIFICATION] ❌ ERROR:', errorMsg);
+    const errorMsg =
+      'API URL contains localhost — physical devices cannot reach it. Set EXPO_PUBLIC_API_BASE_URL to your staging or LAN server (see .env.example and docs/STAGING_CHECKLIST.md).';
+    logger.error('[IDENTIFICATION]', errorMsg);
     throw {
       code: 'NETWORK_ERROR' as const,
       message: errorMsg,
@@ -95,11 +97,9 @@ async function callBackendIdentification(
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
-    console.error('[IDENTIFICATION] ❌ Request timed out after', API_CONFIG.TIMEOUT, 'ms');
-    console.error('[IDENTIFICATION] ❌ This usually means:');
-    console.error('[IDENTIFICATION]    1. Backend server is not running');
-    console.error('[IDENTIFICATION]    2. Backend is unreachable at', apiUrl);
-    console.error('[IDENTIFICATION]    3. Network connectivity issue');
+    logger.error(
+      '[IDENTIFICATION] Request timed out — check backend running and LAN URL (not localhost on device)'
+    );
     controller.abort();
   }, API_CONFIG.TIMEOUT);
   
@@ -110,21 +110,12 @@ async function callBackendIdentification(
   try {
     debug.log('IDENTIFICATION', `Calling backend: ${apiUrl}`);
     
-    // Log request details for debugging
-    console.log('[IDENTIFICATION] 📤 Request details:', {
-      url: apiUrl,
-      method: 'POST',
-      hasFormData: !!formData,
-      timeout: API_CONFIG.TIMEOUT,
-    });
-    
-    const response = await fetch(apiUrl, {
+    const response = await apiFetch(apiUrl, {
       method: 'POST',
       body: formData,
       signal: controller.signal,
-      // Add headers for better error reporting
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
     });
 
@@ -227,26 +218,17 @@ async function callBackendIdentification(
     
     // Check for timeout/abort errors
     if (error.name === 'AbortError' || controller.signal.aborted || error.message?.includes('timeout')) {
-      const errorMessage = `Network request timed out after ${API_CONFIG.TIMEOUT}ms (90 seconds).
+      const base = API_CONFIG.BASE_URL;
+      const errorMessage = `Network request timed out after ${API_CONFIG.TIMEOUT}ms.
 
-Troubleshooting:
-1. ✅ Check Terminal 1 (backend) - do you see any request logs?
-2. ✅ Test backend health: curl http://192.168.1.215:3000/health
-3. ✅ Verify both devices are on the same Wi-Fi network
-4. ✅ Check firewall settings (may be blocking port 3000)
-5. ✅ Try restarting the backend server
-
-If backend is running but not receiving requests, check:
-- Firewall settings on your Mac
-- Network connectivity between devices
-- Backend server logs for errors`;
+Check: backend running, URL correct (${base}), same network if LAN, firewall open, and staging HTTPS reachable. Test: GET ${base}/health`;
       
-      console.error('[IDENTIFICATION] ❌ Timeout/Abort error:', errorMessage);
-      console.error('[IDENTIFICATION] ❌ Error details:', {
-        name: error.name,
-        message: error.message,
-        aborted: controller.signal.aborted,
+      logger.debug('[IDENTIFICATION] Timeout/Abort', errorMessage);
+      logger.captureException(error, {
+        screen: 'identification',
+        kind: 'timeout',
         url: apiUrl,
+        aborted: controller.signal.aborted,
       });
       throw {
         code: 'TIMEOUT' as const,
@@ -257,8 +239,9 @@ If backend is running but not receiving requests, check:
     
     // Check for network errors
     if (error.message?.includes('Network request failed') || error.message?.includes('Failed to fetch')) {
-      const errorMessage = `Network request failed. Check that:\n1. Backend server is running (Terminal 1)\n2. EXPO_PUBLIC_API_BASE_URL is set correctly (currently: ${API_CONFIG.BASE_URL})\n3. Device and computer are on the same Wi-Fi network`;
-      console.error('[IDENTIFICATION] ❌ Network error:', errorMessage);
+      const errorMessage = `Network request failed. Backend: ${API_CONFIG.BASE_URL}. If using a shared API key, set EXPO_PUBLIC_SLOTSYNC_API_KEY to match server SLOTSYNC_API_KEY.`;
+      logger.debug('[IDENTIFICATION] Network error', errorMessage);
+      logger.captureException(error, { screen: 'identification', kind: 'network' });
       throw {
         code: 'NETWORK_ERROR' as const,
         message: errorMessage,
@@ -271,8 +254,7 @@ If backend is running but not receiving requests, check:
       throw error as IdentificationError;
     }
     
-    // Generic API error
-    console.error('[IDENTIFICATION] ❌ API error:', error.message || 'Unknown error');
+    logger.captureException(error, { screen: 'identification', kind: 'api' });
     throw {
       code: 'API_ERROR' as const,
       message: error.message || 'Failed to call backend identification API',
@@ -374,16 +356,7 @@ export async function identifyAlbumFromImage(
     debug.log('IDENTIFICATION', '✅ Backend is reachable', healthData);
   } catch (error: any) {
     debug.error('IDENTIFICATION', '❌ Backend connectivity test failed', error);
-    const errorMessage = `Cannot reach backend server at ${API_CONFIG.BASE_URL}.
-
-Troubleshooting:
-1. ✅ Verify backend is running (Terminal 1)
-2. ✅ Test from Mac: curl http://192.168.1.215:3000/health
-3. ✅ Test from phone browser: http://192.168.1.215:3000/health
-4. ✅ Ensure phone and Mac are on the same Wi-Fi network
-5. ✅ Check Mac firewall settings (should be disabled or allow Node.js)
-
-If health check fails, identification will not work.`;
+    const errorMessage = `Cannot reach backend at ${API_CONFIG.BASE_URL}. Open GET ${API_CONFIG.BASE_URL}/health in a browser on the same device. For preview builds, confirm EAS EXPO_PUBLIC_API_BASE_URL.`;
     
     throw {
       code: 'NETWORK_ERROR' as const,
