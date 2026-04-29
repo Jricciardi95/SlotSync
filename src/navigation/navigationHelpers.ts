@@ -57,13 +57,13 @@ export const navigationHelpers = {
    * Check if a screen belongs to a specific tab
    */
   getTabForScreen: (screen: string): 'Library' | 'Stands' | 'Modes' | 'Batch' | 'Settings' => {
-    if (screen === 'LibraryHome' || screen.startsWith('Library') || 
+    if (screen === 'LibraryHome' || screen.startsWith('Library') || screen === 'CloserLook' ||
         screen === 'AddRecord' || screen === 'RecordDetail' || 
         screen === 'EditRecord' || screen === 'ScanRecord' || 
         screen === 'SongDetail' || screen === 'CSVImport' || 
         screen === 'DevTest') {
       return 'Library';
-    } else if (screen === 'RowsHome' || screen === 'RowDetail' || screen === 'UnitLayout') {
+    } else if (screen === 'RowsHome' || screen === 'RowsManage' || screen === 'RowDetail' || screen === 'UnitLayout') {
       return 'Stands';
     } else if (screen === 'ModesHome' || screen.startsWith('LoadMode') || 
                screen.startsWith('CleanupMode') || screen.startsWith('ReorganizeMode')) {

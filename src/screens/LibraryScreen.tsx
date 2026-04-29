@@ -962,6 +962,13 @@ export const LibraryScreen: React.FC<Props> = ({ navigation, route }) => {
               );
             })}
           </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <AppButton
+              title="Closer Look"
+              variant="secondary"
+              onPress={() => navigation.navigate('CloserLook')}
+            />
+          </View>
 
           {filter === 'PLAYLISTS' ? (
             <ScrollView

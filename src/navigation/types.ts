@@ -8,12 +8,14 @@ export type RootTabParamList = {
 
 export type StandsStackParamList = {
   RowsHome: undefined;
+  RowsManage: undefined;
   RowDetail: { rowId: string; rowName: string };
   UnitLayout: { unitId: string; unitName?: string };
 };
 
 export type LibraryStackParamList = {
   LibraryHome: { returnToTab?: 'ALBUMS' | 'ARTISTS' | 'SONGS' | 'ALL' } | undefined;
+  CloserLook: { unitId?: string } | undefined;
   AddRecord: { 
     imageUri?: string; 
     initialArtist?: string; 

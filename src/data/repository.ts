@@ -208,6 +208,11 @@ export const getUnitsByRow = async (rowId: string): Promise<Unit[]> => {
   );
 };
 
+export const getAllUnits = async (): Promise<Unit[]> => {
+  const db = await getDatabase();
+  return db.getAllAsync<Unit>(`SELECT * FROM units ORDER BY updatedAt DESC, createdAt DESC`);
+};
+
 export const getUnitById = async (unitId: string): Promise<Unit | null> => {
   const db = await getDatabase();
   const unit = await db.getFirstAsync<Unit>(
@@ -215,6 +220,25 @@ export const getUnitById = async (unitId: string): Promise<Unit | null> => {
     unitId
   );
   return unit ?? null;
+};
+
+export const updateUnitNetwork = async (
+  unitId: string,
+  updates: { ipAddress?: string; totalSlots?: number }
+): Promise<void> => {
+  const db = await getDatabase();
+  const timestamp = now();
+  const existing = await getUnitById(unitId);
+  if (!existing) return;
+  await db.runAsync(
+    `UPDATE units
+     SET ipAddress = ?, totalSlots = ?, updatedAt = ?
+     WHERE id = ?`,
+    updates.ipAddress ?? existing.ipAddress,
+    updates.totalSlots ?? existing.totalSlots,
+    timestamp,
+    unitId
+  );
 };
 
 export const persistUnitOrder = async (
@@ -689,6 +713,33 @@ export const getRecordLocationDetails = async (
     unitName: location.unitName,
     rowName: location.rowName,
   };
+};
+
+/**
+ * Get all records assigned to a unit, sorted by first slot number.
+ * Used by Closer Look horizontal shelf browsing.
+ */
+export const getUnitAssignedRecords = async (
+  unitId: string
+): Promise<Array<RecordModel & { slotNumbers: number[]; firstSlot: number }>> => {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<(RecordModel & { locationSlots: string })>(
+    `SELECT r.*, rl.slotNumbers as locationSlots
+     FROM recordLocations rl
+     JOIN records r ON rl.recordId = r.id
+     WHERE rl.unitId = ?
+     ORDER BY CAST(json_extract(rl.slotNumbers, '$[0]') AS INTEGER) ASC`,
+    unitId
+  );
+
+  return rows.map((row) => {
+    const slots = parseNumberArray(row.locationSlots as unknown as string).sort((a, b) => a - b);
+    return {
+      ...row,
+      slotNumbers: slots,
+      firstSlot: slots[0] ?? 0,
+    };
+  });
 };
 
 export const getPlacedRecordIds = async (): Promise<Set<string>> => {

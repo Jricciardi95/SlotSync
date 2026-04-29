@@ -11,6 +11,7 @@ import { NavigationContext } from './NavigationContext';
 // Screen imports - direct imports (no circular dependencies since screens import from navigation, not vice versa)
 import { LibraryScreen } from '../screens/LibraryScreen';
 import { StandsScreen } from '../screens/StandsScreen';
+import { SetupBlueprintScreen } from '../screens/SetupBlueprintScreen';
 import { ModesScreen } from '../screens/ModesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AddRecordScreen } from '../screens/AddRecordScreen';
@@ -18,6 +19,7 @@ import { RecordDetailScreen } from '../screens/RecordDetailScreen';
 import { EditRecordScreen } from '../screens/EditRecordScreen';
 import { ScanRecordScreen } from '../screens/ScanRecordScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
+import { CloserLookScreen } from '../screens/CloserLookScreen';
 import { CSVImportScreen } from '../screens/CSVImportScreen';
 import { BatchScanScreen } from '../screens/BatchScanScreen';
 import { BatchReviewScreen } from '../screens/BatchReviewScreen';
@@ -172,6 +174,8 @@ export const CustomNavigation: React.FC = () => {
         return <LibraryScreen {...defaultRouteProps} />;
       case 'AddRecord':
         return <AddRecordScreen {...routeProps} />;
+      case 'CloserLook':
+        return <CloserLookScreen {...routeProps} />;
       case 'RecordDetail':
         return <RecordDetailScreen {...routeProps} />;
       case 'EditRecord':
@@ -191,6 +195,8 @@ export const CustomNavigation: React.FC = () => {
       
       // Stands screens
       case 'RowsHome':
+        return <SetupBlueprintScreen {...defaultRouteProps} />;
+      case 'RowsManage':
         return <StandsScreen {...defaultRouteProps} />;
       case 'RowDetail':
         return <RowDetailScreen {...routeProps} />;
