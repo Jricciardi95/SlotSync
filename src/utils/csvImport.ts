@@ -4,7 +4,7 @@
  * Shared utilities for CSV import with concurrency control and retry logic
  */
 
-import { getApiUrl } from '../config/api';
+import { getApiUrl, resolveApiBaseUrl } from '../config/api';
 import { apiFetch } from '../config/apiFetch';
 import { logger } from './logger';
 import { createRecord, createTracksBatch, createRecordsBatch } from '../data/repository';
@@ -378,6 +378,19 @@ export async function importCsvRowsWithEnrichment(
   const maxRetries = options.maxRetries ?? 2;
   const batchSize = 100; // PR5: Process 100 records per transaction
   const limit = createConcurrencyLimiter(concurrency);
+
+  // Ensure API base URL is resolved before any per-row metadata requests.
+  // Without this, getApiUrl() can throw for every row if startup initialization timed out.
+  try {
+    await resolveApiBaseUrl();
+  } catch (error: any) {
+    const message = error?.message || 'API base URL resolution failed';
+    logger.error(`[CSV Import] ❌ API initialization failed before import: ${message}`);
+    throw new Error(
+      'Cannot start CSV import because the backend API is not configured or reachable. ' +
+      'Check EXPO_PUBLIC_API_BASE_URL and backend /health, then try again.'
+    );
+  }
 
   logger.debug(`[CSV Import] 🚀 Starting import of ${rows.length} rows (concurrency: ${concurrency}, retries: ${maxRetries}, batch size: ${batchSize})`);
 
