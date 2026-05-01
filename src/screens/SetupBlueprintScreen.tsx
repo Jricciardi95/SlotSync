@@ -125,7 +125,7 @@ export const SetupBlueprintScreen: React.FC<Props> = ({ navigation }) => {
       <AppScreen title="Shelves Setup" subtitle="Blueprint your listening area and tap a shelf to browse it.">
         <View style={{ gap: spacing.md }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <AppButton title="Add Shape" onPress={() => setModalVisible(true)} />
+            <AppButton title="Add shelf" onPress={() => setModalVisible(true)} />
             <AppButton title="Manage Stands" variant="ghost" onPress={() => navigation.navigate('RowsManage')} />
           </View>
 

@@ -11,6 +11,7 @@ export type StandsStackParamList = {
   RowsManage: undefined;
   RowDetail: { rowId: string; rowName: string };
   UnitLayout: { unitId: string; unitName?: string };
+  CloserLook: { unitId?: string } | undefined;
 };
 
 export type LibraryStackParamList = {

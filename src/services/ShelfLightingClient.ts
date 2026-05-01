@@ -148,8 +148,13 @@ export const setGlobalLighting = async ({
   }
 };
 
-/** Fire-and-forget highlight when opening an album (no alert on failure). */
-export const highlightAlbumSlots = async (
+const SLOW_BLINK_GAP_MS = 700;
+
+/**
+ * Album detail: three slow blinks on the primary slot, then steady select/hold.
+ * Silent failures (Settings shelf optional).
+ */
+export const presentAlbumShelfHighlight = async (
   slotNumbers: number[],
   unitIpAddress?: string | null
 ): Promise<void> => {
@@ -160,18 +165,49 @@ export const highlightAlbumSlots = async (
   }
   const sorted = [...new Set(slotNumbers)].filter((n) => n >= 1).sort((a, b) => a - b);
   if (!sorted.length) return;
+  const primary = sorted[0];
   try {
+    for (let i = 0; i < 3; i += 1) {
+      await shelfBlinkSlot(primary, unitIpAddress);
+      if (i < 2) {
+        await new Promise((r) => setTimeout(r, SLOW_BLINK_GAP_MS));
+      }
+    }
+    await new Promise((r) => setTimeout(r, 450));
     await setSlotLight(
       {
         ipAddress: unitIpAddress ?? '',
-        slot: sorted[0],
+        slot: primary,
         allSlots: sorted,
       },
       { silent: true }
     );
   } catch {
-    /* logged in setSlotLight */
+    /* optional shelf */
   }
+};
+
+/** Return shelf to idle when leaving album detail (silent). */
+export const releaseAlbumShelfHighlight = async (
+  unitIpAddress?: string | null
+): Promise<void> => {
+  try {
+    await shelfIdle(unitIpAddress);
+  } catch {
+    try {
+      await clearSlotLight({ ipAddress: unitIpAddress ?? '' }, { silent: true });
+    } catch {
+      /* ignore */
+    }
+  }
+};
+
+/** @deprecated use presentAlbumShelfHighlight */
+export const highlightAlbumSlots = async (
+  slotNumbers: number[],
+  unitIpAddress?: string | null
+): Promise<void> => {
+  await presentAlbumShelfHighlight(slotNumbers, unitIpAddress);
 };
 
 export { shelfGetStatus, shelfIdle, shelfClear, shelfDemo, shelfBlinkSlot, shelfSetBrightness };

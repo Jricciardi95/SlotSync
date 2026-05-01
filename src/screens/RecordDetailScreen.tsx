@@ -26,7 +26,6 @@ import {
   getUnitsByRow,
   getShelfSlotGroupsByUnit,
   assignRecordToSlotGroup,
-  getUnitById,
   getActiveSession,
   createSession,
   createSessionRecord,
@@ -49,7 +48,10 @@ import {
   Track,
 } from '../data/types';
 import { LibraryStackParamList } from '../navigation/types';
-import { highlightAlbumSlots, setSlotLight, shelfBlinkSlot } from '../services/ShelfLightingClient';
+import {
+  presentAlbumShelfHighlight,
+  releaseAlbumShelfHighlight,
+} from '../services/ShelfLightingClient';
 import { AppIconButton } from '../components/AppIconButton';
 
 type Props = NativeStackScreenProps<LibraryStackParamList, 'RecordDetail'>;
@@ -111,7 +113,6 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Track whether we've successfully loaded this record at least once
   // Once loaded, we never show the full-screen spinner again (even on navigation back)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [lighting, setLighting] = useState(false);
   const [fetchingTracks, setFetchingTracks] = useState(false);
 
   const [assignVisible, setAssignVisible] = useState(false);
@@ -181,14 +182,16 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [recordId, record]);
 
-  // When the user opens an album that has a shelf location, highlight those slot(s) on the ESP32
-  // (silent failure if shelf URL is unset or device offline).
+  // Album detail: three slow blinks on the slot, then steady highlight until this screen unmounts.
   useEffect(() => {
     if (!location?.slotNumbers?.length) return;
     const timer = setTimeout(() => {
-      highlightAlbumSlots(location.slotNumbers);
+      presentAlbumShelfHighlight(location.slotNumbers);
     }, 450);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      releaseAlbumShelfHighlight();
+    };
   }, [recordId, location?.id, location?.slotNumbers?.join(',')]);
 
   useFocusEffect(
@@ -468,47 +471,13 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const handleLight = async () => {
-    if (!location) return;
-    const unitRecord = await getUnitById(location.unitId);
-    if (!unitRecord) {
-      Alert.alert('Unit not found', 'This unit no longer exists.');
+  const openShelfBrowse = () => {
+    const unitId = slotAssignment?.unit.id ?? location?.unitId;
+    if (!unitId) {
+      Alert.alert('No shelf', 'Assign this album to a shelf and slot first.');
       return;
     }
-    try {
-      setLighting(true);
-      await setSlotLight({
-        ipAddress: unitRecord.ipAddress,
-        slot: location.slotNumbers[0],
-        allSlots: location.slotNumbers,
-        totalSlots: unitRecord.totalSlots,
-        color: '#08F7FE',
-        brightness: 0.9,
-        effect: 'steady',
-      });
-    } catch (error) {
-      logger.debug(error);
-    } finally {
-      setLighting(false);
-    }
-  };
-
-  const handleFindMode = async () => {
-    if (!location) return;
-    const unitRecord = await getUnitById(location.unitId);
-    if (!unitRecord) {
-      Alert.alert('Unit not found', 'This unit no longer exists.');
-      return;
-    }
-    try {
-      setLighting(true);
-      await shelfBlinkSlot(location.slotNumbers[0], unitRecord.ipAddress);
-      Alert.alert('Find mode', `Blinking slot ${location.slotNumbers[0]} on shelf.`);
-    } catch (error) {
-      logger.debug(error);
-    } finally {
-      setLighting(false);
-    }
+    navigation.navigate('CloserLook', { unitId });
   };
 
   const handleAddToSession = async () => {
@@ -825,62 +794,14 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <AppText variant="body">Not placed yet</AppText>
             )}
             <AppButton title="Assign / Change Location" onPress={openAssign} />
-            {/* PR7: Slot Assignment Section */}
-            {slotAssignment ? (
-              <>
-                <AppText variant="body" style={{ marginTop: spacing.sm, fontWeight: '600' }}>
-                  Slot Assignment
-                </AppText>
-                <AppText variant="body">
-                  Unit: {slotAssignment.unit.name}
-                </AppText>
-                <AppText variant="body">
-                  Slot: {slotAssignment.slot.slotNumber}
-                </AppText>
-                <AppButton
-                  title="View Virtual Shelf"
-                  variant="secondary"
-                  onPress={() => {
-                    navigation.navigate('VirtualShelf', {
-                      unitId: slotAssignment.unit.id,
-                      recordId: recordId,
-                    });
-                  }}
-                />
-              </>
-            ) : location ? (
-              <>
-                <AppText variant="caption" style={{ color: colors.textMuted, marginTop: spacing.sm }}>
-                  No slot assignment yet. Use Virtual Shelf to assign a specific slot.
-                </AppText>
-                <AppButton
-                  title="Open Virtual Shelf"
-                  variant="secondary"
-                  onPress={() => {
-                    if (location.unitId) {
-                      navigation.navigate('VirtualShelf', {
-                        unitId: location.unitId,
-                        recordId: recordId,
-                      });
-                    } else {
-                      Alert.alert('Error', 'Unit ID not available');
-                    }
-                  }}
-                />
-              </>
-            ) : null}
-            <AppButton
-              title="Light Slot"
-              variant="secondary"
-              disabled={!location || lighting}
-              onPress={handleLight}
-            />
-            <AppButton
-              title="Find on Shelf (Blink)"
-              variant="secondary"
-              disabled={!location || lighting}
-              onPress={handleFindMode}
-            />
+            {(slotAssignment || location?.unitId) && (
+              <AppButton
+                title="Open Virtual Shelf"
+                variant="secondary"
+                onPress={openShelfBrowse}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
           </AppCard>
 
           <AppCard style={{ gap: spacing.sm }}>
