@@ -37,6 +37,7 @@ import {
   deleteRecord,
   getSlotAssignmentDetails,
   getSlotAssignmentByRecord,
+  attachOrphanUnitsToDefaultRow,
 } from '../data/repository';
 import { identifyRecord } from '../services/RecordIdentificationService';
 import {
@@ -221,6 +222,7 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setAssignVisible(true);
     setPickerLoading(true);
     try {
+      await attachOrphanUnitsToDefaultRow();
       const fetchedRows = await getRows();
       setRows(fetchedRows);
       setUnits([]);
@@ -1008,6 +1010,12 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             {!pickerLoading && (
               <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ gap: spacing.md }}>
+                {!selectedRow && rows.length === 0 && (
+                  <AppText variant="caption" style={{ color: colors.textSecondary }}>
+                    No shelves found yet. Add a shelf in Shelves Setup (blueprint) with “create shelf unit”, or open Manage
+                    Stands to add a stand and shelf unit. Then return here to pick a slot.
+                  </AppText>
+                )}
                 {!selectedRow &&
                   rows.map((row) => (
                     <TouchableOpacity
@@ -1030,6 +1038,11 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     <AppText variant="caption">
                       Units in {selectedRow.name}
                     </AppText>
+                    {units.length === 0 && (
+                      <AppText variant="caption" style={{ color: colors.textSecondary }}>
+                        No shelf units in this stand. Open Manage Stands and add a unit, or create a shelf from Shelves Setup.
+                      </AppText>
+                    )}
                     {units.map((unit) => (
                       <TouchableOpacity
                         key={unit.id}
@@ -1056,6 +1069,11 @@ export const RecordDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     <AppText variant="caption">
                       Choose slots in {selectedUnit.name}
                     </AppText>
+                    {slotGroups.length === 0 && (
+                      <AppText variant="caption" style={{ color: colors.textSecondary }}>
+                        No slots on this unit. Edit the unit’s slot count in Manage Stands.
+                      </AppText>
+                    )}
                     <View style={styles.slotGrid}>
                       {slotGroups.map((group) => (
                         <TouchableOpacity

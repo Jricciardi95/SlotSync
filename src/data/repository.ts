@@ -118,6 +118,43 @@ const getNextPositionIndex = async (
   return (result?.maxIndex ?? -1) + 1;
 };
 
+/**
+ * Blueprint / standalone unit creation uses rowId = NULL. The record detail
+ * "Assign Location" flow lists rows, then units per row — orphan units never appear.
+ * Attach those units to a single default row so assignment always works.
+ */
+export const attachOrphanUnitsToDefaultRow = async (): Promise<void> => {
+  const db = await getDatabase();
+  const orphans = await db.getAllAsync<Unit>(
+    `SELECT * FROM units WHERE rowId IS NULL ORDER BY createdAt ASC`
+  );
+  if (orphans.length === 0) return;
+
+  const rows = await getRows();
+  let targetRowId: string;
+
+  if (rows.length === 0) {
+    const row = await createRow('Shelves');
+    targetRowId = row.id;
+  } else {
+    targetRowId = rows[0].id;
+  }
+
+  const timestamp = now();
+  await db.withTransactionAsync(async () => {
+    for (const unit of orphans) {
+      const nextIndex = await getNextPositionIndex(db, targetRowId);
+      await db.runAsync(
+        `UPDATE units SET rowId = ?, positionIndex = ?, updatedAt = ? WHERE id = ?`,
+        targetRowId,
+        nextIndex,
+        timestamp,
+        unit.id
+      );
+    }
+  });
+};
+
 const initializeSlotGroupsForUnit = async (
   db: SQLiteDatabase,
   unitId: string,
