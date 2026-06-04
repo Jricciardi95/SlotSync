@@ -1,0 +1,24 @@
+flowchart TB
+  subgraph Mobile["React Native App (Expo)"]
+    UI[Screens / Navigation]
+    LDB[(expo-sqlite slotsync.db)]
+    UI --> LDB
+  end
+
+  subgraph Backend["Node backend-example/server-hybrid.js"]
+    API[Express /api/*]
+    BDB[(SQLite + embeddings)]
+    API --> BDB
+    API --> Discogs[Discogs API]
+    API --> Vision[Google Vision optional]
+    API --> CLIP[CLIP embeddings local]
+  end
+
+  subgraph ShelfLAN["Shelf LAN"]
+    ESP[ESP32 firmware HTTP]
+    Mock[tools/mock-shelf-server :8787]
+  end
+
+  UI -->|"POST identify, GET metadata"| API
+  UI -->|"GET /slot, /blink (no cloud)"| ESP
+  UI -->|"dev / simulator"| Mock
